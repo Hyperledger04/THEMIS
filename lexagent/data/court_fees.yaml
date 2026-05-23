@@ -1,0 +1,84 @@
+# Court fee schedule — editable without touching Python code.
+# Source: Court Fees Act 1870 + state schedules (Delhi, Maharashtra, Tamil Nadu).
+# Update this file when fee schedules change (Finance Act, state budget, court order).
+# All values in Indian Rupees (INR). Last reviewed: 2026.
+
+"civil suit (district court)":
+  base: "Ad valorem — 10% of suit valuation (max ₹75,000 under Delhi Court Fees Act)."
+  note: "Check Schedule I of the Court Fees Act 1870 and the applicable state schedule."
+
+"writ petition (high court)":
+  base: "Fixed — ₹500 (Delhi HC) | ₹1,000 (Madras HC) | ₹2,000 (Bombay HC). Verify with court."
+  note: "No ad valorem element. Filed under Article 226 (HC) or 32 (SC)."
+
+"writ petition (supreme court)":
+  base: "Fixed — ₹500 (Article 32 petition before the Supreme Court)."
+  note: "Plus process fees and miscellaneous charges as per SC Rules."
+
+"bail application":
+  base: "Fixed — ₹10 to ₹50 (nominal; most magistrate and sessions courts)."
+  note: "Criminal application fees are nominal under Schedule II. Anticipatory bail: ₹50."
+
+"anticipatory bail":
+  base: "Fixed — ₹50 (most courts)."
+  note: "Filed under Section 438 CrPC. Nominal fee; check specific state rules."
+
+"injunction application":
+  base: "Fixed — ₹50 to ₹200 (I.A. fee; varies by court and state)."
+  note: "Interlocutory application filed alongside the main suit. Separate I.A. fee applies."
+
+"execution petition":
+  base: "Ad valorem — typically 50% of the decree amount (maximum caps vary by state)."
+  note: "Subject to Order XXI CPC and state Court Fees schedule. Check court registry."
+
+"appeal (first appeal)":
+  base: "Same as original suit fee in most states (Delhi: ₹500 flat for some HCs)."
+  note: "Verify with specific High Court rules. Some courts require full ad valorem."
+
+"revision petition":
+  base: "Fixed — ₹50 to ₹200 depending on court (district/HC)."
+  note: "Criminal revision: Schedule II fee. Civil revision: varies by state."
+
+"legal notice":
+  base: "No court fee — pre-litigation correspondence. Lawyer fees + postal charges apply."
+  note: "Not a court filing; stamp duty applies only if it is a deed or notarised document."
+
+"consumer complaint (district forum)":
+  base: "Fixed — ₹200 for claims up to ₹20 lakh."
+  note: "Consumer Protection Act 2019 Schedule. District Consumer Commission."
+
+"consumer complaint (state commission)":
+  base: "Fixed — ₹2,000 for claims ₹20 lakh–₹1 crore."
+  note: "State Consumer Disputes Redressal Commission fee."
+
+"consumer complaint (national commission)":
+  base: "Fixed — ₹7,500 for claims above ₹1 crore."
+  note: "National Consumer Disputes Redressal Commission fee."
+
+"cheque dishonour (ni act 138)":
+  base: "Fixed — ₹200 (magistrate complaint under Section 138 NI Act)."
+  note: "Criminal complaint; no ad valorem component."
+
+"divorce petition":
+  base: "Fixed — ₹200 to ₹500 (family court filing; varies by state)."
+  note: "Hindu Marriage Act / Special Marriage Act proceedings. Low nominal fees."
+
+"plaint (civil suit)":
+  base: "Ad valorem — 10% of suit valuation (max ₹75,000 under Delhi Court Fees Act)."
+  note: "Identical to civil suit. Check Schedule I, Court Fees Act 1870 + state amendment."
+
+"written statement":
+  base: "No separate court fee for filing written statement."
+  note: "Court fee already paid on the plaint. Process fee may apply for service."
+
+"affidavit":
+  base: "Stamp paper — ₹10 to ₹50 (state-specific non-judicial stamp paper)."
+  note: "Not a court fee; stamp paper cost. Notarisation charges extra (~₹50–200)."
+
+"contract review":
+  base: "Not a court filing — no court fee."
+  note: "Advisory/transactional work. Stamp duty on the contract itself is separate."
+
+"special leave petition (slp)":
+  base: "Fixed — ₹500 (Supreme Court fee under Article 136)."
+  note: "Plus process fees. SLP against HC judgment to Supreme Court."

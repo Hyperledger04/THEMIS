@@ -1,0 +1,481 @@
+# Intake question banks — one entry per matter type.
+# The LLM receives the relevant bank, extracts already-answered fields from conversation history,
+# and asks only the unanswered mandatory questions (up to 5 per turn), then optional ones.
+#
+# Each question:
+#   field:      state key to populate
+#   label:      question text shown to user
+#   type:       open | binary | mcq
+#   options:    list of choices (mcq only)
+#   mandatory:  true = always ask if not answered; false = ask only if relevant context present
+#   ask_if:     optional condition — field:value pair; skip question unless that field matches
+
+writ_petition:
+  required:
+    - field: parties
+      label: "Who are the petitioner and respondent? (e.g., 'Ram Singh v. State of Delhi')"
+      type: open
+      mandatory: true
+
+    - field: article_invoked
+      label: "Are you filing under Article 226 (High Court) or Article 32 (Supreme Court)?"
+      type: mcq
+      options:
+        - "Article 226 – High Court"
+        - "Article 32 – Supreme Court"
+      mandatory: true
+
+    - field: jurisdiction
+      label: "Which court? (e.g., Delhi High Court, Bombay High Court)"
+      type: mcq
+      options:
+        - "Delhi High Court"
+        - "Bombay High Court"
+        - "Madras High Court"
+        - "Supreme Court of India"
+      mandatory: true
+
+    - field: fundamental_right
+      label: "Which fundamental right has been violated? (e.g., Art. 14 equality, Art. 19 speech, Art. 21 life)"
+      type: open
+      mandatory: true
+
+    - field: cause_of_action_date
+      label: "When did the cause of action arise? (Date or approximate period)"
+      type: open
+      mandatory: true
+
+    - field: relief_sought
+      label: "What specific relief are you seeking? (e.g., quash order dated X, direct respondent to Y)"
+      type: open
+      mandatory: true
+
+    - field: purpose
+      label: "Briefly describe the facts — what happened and why is this unconstitutional/illegal?"
+      type: open
+      mandatory: true
+
+  optional:
+    - field: alternative_remedy
+      label: "Has the petitioner exhausted all alternative remedies before filing this writ?"
+      type: binary
+      mandatory: false
+
+    - field: previous_orders
+      label: "Are there any previous court orders or interim orders in this matter?"
+      type: binary
+      mandatory: false
+
+    - field: urgency
+      label: "Is this urgent? Do you need ex-parte interim relief?"
+      type: binary
+      mandatory: false
+
+    - field: citations_required
+      label: "Do you want relevant Supreme Court precedents cited in the petition?"
+      type: binary
+      mandatory: false
+
+    - field: hearing_date
+      label: "Is there a next hearing date scheduled? (helps set a reminder)"
+      type: open
+      mandatory: false
+
+
+plaint:
+  required:
+    - field: parties
+      label: "Who are the plaintiff and defendant? (names and brief description)"
+      type: open
+      mandatory: true
+
+    - field: jurisdiction
+      label: "Which court will this plaint be filed in?"
+      type: mcq
+      options:
+        - "Delhi District Court"
+        - "Delhi High Court (original side)"
+        - "Bombay City Civil Court"
+        - "Bombay High Court (original side)"
+        - "Other (type below)"
+      mandatory: true
+
+    - field: cause_of_action_date
+      label: "When did the cause of action arise?"
+      type: open
+      mandatory: true
+
+    - field: purpose
+      label: "What is the nature of the dispute? (e.g., recovery of money, specific performance, property possession)"
+      type: open
+      mandatory: true
+
+    - field: relief_sought
+      label: "What reliefs are you claiming? (e.g., Rs. X as damages, possession of Plot Y, injunction against Z)"
+      type: open
+      mandatory: true
+
+    - field: plaint_valuation
+      label: "What is the valuation of the suit for court fee purposes? (approximate amount in rupees)"
+      type: open
+      mandatory: true
+
+  optional:
+    - field: limitation_applicable
+      label: "Is limitation a concern? (cause of action more than 3 years ago?)"
+      type: binary
+      mandatory: false
+
+    - field: previous_orders
+      label: "Has there been any prior litigation or arbitration between these parties?"
+      type: binary
+      mandatory: false
+
+    - field: urgency
+      label: "Is an interim injunction under Order XXXIX needed along with the plaint?"
+      type: binary
+      mandatory: false
+
+    - field: citations_required
+      label: "Do you want supporting case law cited in the plaint?"
+      type: binary
+      mandatory: false
+
+
+injunction:
+  required:
+    - field: parties
+      label: "Who are the applicant and respondent?"
+      type: open
+      mandatory: true
+
+    - field: jurisdiction
+      label: "Which court is this application being filed in?"
+      type: mcq
+      options:
+        - "Delhi District Court"
+        - "Delhi High Court"
+        - "Bombay High Court"
+        - "Madras High Court"
+        - "Other (type below)"
+      mandatory: true
+
+    - field: purpose
+      label: "What needs to be restrained? Describe the act you want the court to stop."
+      type: open
+      mandatory: true
+
+    - field: relief_sought
+      label: "What exact order are you seeking? (e.g., restrain defendant from alienating property, stop construction)"
+      type: open
+      mandatory: true
+
+    - field: urgency
+      label: "Is this an urgent/ex-parte application (respondent not yet served)?"
+      type: binary
+      mandatory: true
+
+    - field: cause_of_action_date
+      label: "When did you first become aware of the act you want restrained?"
+      type: open
+      mandatory: true
+
+  optional:
+    - field: previous_orders
+      label: "Has any court previously passed any order in this matter?"
+      type: binary
+      mandatory: false
+
+    - field: alternative_remedy
+      label: "Is the balance of convenience in favour of granting the injunction?"
+      type: binary
+      mandatory: false
+
+    - field: citations_required
+      label: "Do you want the three-part test (prima facie case, balance of convenience, irreparable harm) cited with precedents?"
+      type: binary
+      mandatory: false
+
+
+legal_notice:
+  required:
+    - field: parties
+      label: "Who is sending the notice (your client) and to whom is it addressed?"
+      type: open
+      mandatory: true
+
+    - field: purpose
+      label: "What is the grievance or legal basis for the notice? (e.g., non-payment, breach of contract, defamation)"
+      type: open
+      mandatory: true
+
+    - field: relief_sought
+      label: "What action are you demanding from the recipient? (e.g., pay Rs. X within 15 days, cease and desist)"
+      type: open
+      mandatory: true
+
+    - field: notice_period
+      label: "How many days are you giving the recipient to respond or comply?"
+      type: mcq
+      options:
+        - "7 days"
+        - "15 days"
+        - "30 days"
+        - "60 days"
+      mandatory: true
+
+    - field: jurisdiction
+      label: "Under which jurisdiction / governing law is this notice being issued?"
+      type: open
+      mandatory: true
+
+  optional:
+    - field: cause_of_action_date
+      label: "When did the breach or cause of action occur?"
+      type: open
+      mandatory: false
+
+    - field: urgency
+      label: "Should this notice warn of immediate legal action if demands are not met?"
+      type: binary
+      mandatory: false
+
+    - field: citations_required
+      label: "Do you want relevant statutory provisions cited in the notice?"
+      type: binary
+      mandatory: false
+
+
+bail_application:
+  required:
+    - field: parties
+      label: "Who is the accused and which police station/agency arrested them?"
+      type: open
+      mandatory: true
+
+    - field: jurisdiction
+      label: "Which court / sessions court / High Court is this bail application for?"
+      type: open
+      mandatory: true
+
+    - field: offence_section
+      label: "What are the sections charged under? (e.g., IPC 302, NDPS Act S.21)"
+      type: open
+      mandatory: true
+
+    - field: litigation_stage
+      label: "What stage has the case reached?"
+      type: mcq
+      options:
+        - "FIR just registered — chargesheet not filed"
+        - "Chargesheet filed — cognizance not yet taken"
+        - "Cognizance taken — trial ongoing"
+        - "Conviction — filing appeal"
+      mandatory: true
+
+    - field: bail_type
+      label: "What type of bail application is this?"
+      type: mcq
+      options:
+        - "Regular bail (Section 437/439 CrPC)"
+        - "Anticipatory bail (Section 438 CrPC)"
+        - "Interim bail (urgent)"
+        - "Default bail (S.167 CrPC — 60/90 days chargesheet not filed)"
+      mandatory: true
+
+    - field: custody_duration
+      label: "How long has the accused been in custody?"
+      type: open
+      mandatory: true
+
+    - field: purpose
+      label: "Briefly describe the accused's personal background and grounds for bail (e.g., roots in society, no flight risk, family dependents)"
+      type: open
+      mandatory: true
+
+  optional:
+    - field: hearing_date
+      label: "Is there a next hearing date set? If yes, when?"
+      type: open
+      mandatory: false
+
+    - field: previous_orders
+      label: "Has any prior bail application been filed and rejected?"
+      type: binary
+      mandatory: false
+
+    - field: urgency
+      label: "Is there a medical emergency or other urgent ground for this application?"
+      type: binary
+      mandatory: false
+
+    - field: citations_required
+      label: "Do you want relevant Supreme Court bail jurisprudence cited?"
+      type: binary
+      mandatory: false
+
+
+written_statement:
+  required:
+    - field: parties
+      label: "Who is the defendant and who is the plaintiff in the original suit?"
+      type: open
+      mandatory: true
+
+    - field: jurisdiction
+      label: "Which court is the suit pending before?"
+      type: open
+      mandatory: true
+
+    - field: purpose
+      label: "What are the plaintiff's claims that need to be rebutted? (summarise the plaint allegations)"
+      type: open
+      mandatory: true
+
+    - field: relief_sought
+      label: "What is the defendant's position — are any claims admitted, partially admitted, or denied?"
+      type: open
+      mandatory: true
+
+    - field: cause_of_action_date
+      label: "Does the defendant raise any preliminary objection — limitation, jurisdiction, non-maintainability?"
+      type: open
+      mandatory: true
+
+  optional:
+    - field: urgency
+      label: "Does the defendant have a counterclaim to file along with the written statement?"
+      type: binary
+      mandatory: false
+
+    - field: citations_required
+      label: "Should relevant provisions of CPC (Order VIII) be cited?"
+      type: binary
+      mandatory: false
+
+
+contract_review:
+  required:
+    - field: parties
+      label: "Who are the contracting parties? (party names and roles, e.g., licensor/licensee)"
+      type: open
+      mandatory: true
+
+    - field: purpose
+      label: "What type of contract is this? (e.g., NDA, employment agreement, SaaS terms, real estate sale deed)"
+      type: open
+      mandatory: true
+
+    - field: jurisdiction
+      label: "Which law governs this contract and which courts have jurisdiction?"
+      type: open
+      mandatory: true
+
+    - field: relief_sought
+      label: "What do you want from this review? (e.g., identify risky clauses, flag non-standard terms, suggest redlines)"
+      type: mcq
+      options:
+        - "Identify high-risk clauses only"
+        - "Full redline with suggested rewrites"
+        - "Compliance check (specific regulation)"
+        - "Negotiation strategy and positions"
+      mandatory: true
+
+  optional:
+    - field: urgency
+      label: "Is there a signing deadline? If yes, when?"
+      type: open
+      mandatory: false
+
+    - field: previous_orders
+      label: "Is this a renewal or amendment of an existing contract?"
+      type: binary
+      mandatory: false
+
+
+affidavit:
+  required:
+    - field: parties
+      label: "Who is the deponent (person swearing the affidavit)?"
+      type: open
+      mandatory: true
+
+    - field: jurisdiction
+      label: "Before which court, authority, or for what purpose is this affidavit being sworn?"
+      type: open
+      mandatory: true
+
+    - field: purpose
+      label: "What facts need to be stated in the affidavit? (Provide the key facts to be deposed)"
+      type: open
+      mandatory: true
+
+  optional:
+    - field: urgency
+      label: "Does this affidavit need to be accompanied by any exhibit/annexure?"
+      type: binary
+      mandatory: false
+
+
+criminal_revision:
+  required:
+    - field: parties
+      label: "Who is the revisionist/applicant and who is the respondent?"
+      type: open
+      mandatory: true
+
+    - field: jurisdiction
+      label: "Which Sessions Court or High Court is this revision filed before?"
+      type: open
+      mandatory: true
+
+    - field: litigation_stage
+      label: "What stage has the original case reached?"
+      type: mcq
+      options:
+        - "FIR registered — chargesheet pending"
+        - "Chargesheet filed — cognizance taken"
+        - "Trial ongoing"
+        - "Conviction by Trial Court — revising sentence/acquittal"
+      mandatory: true
+
+    - field: offence_section
+      label: "Sections involved in the original case? (e.g., IPC 420, CrPC 156(3))"
+      type: open
+      mandatory: true
+
+    - field: purpose
+      label: "What error or illegality in the lower court order do you want the revisional court to correct?"
+      type: open
+      mandatory: true
+
+    - field: relief_sought
+      label: "What relief are you seeking? (e.g., set aside conviction, reduce sentence, quash proceedings)"
+      type: open
+      mandatory: true
+
+    - field: cause_of_action_date
+      label: "Date of the impugned order or judgment being challenged?"
+      type: open
+      mandatory: true
+
+  optional:
+    - field: hearing_date
+      label: "Is there a hearing date already fixed in the revisional court?"
+      type: open
+      mandatory: false
+
+    - field: previous_orders
+      label: "Were there any interim orders or stay applications in the original proceedings?"
+      type: binary
+      mandatory: false
+
+    - field: urgency
+      label: "Is there a sentence being served that requires urgent stay?"
+      type: binary
+      mandatory: false
+
+    - field: citations_required
+      label: "Do you want Supreme Court revision jurisprudence cited?"
+      type: binary
+      mandatory: false

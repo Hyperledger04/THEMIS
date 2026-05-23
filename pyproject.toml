@@ -1,0 +1,77 @@
+[project]
+name = "lexagent"
+version = "0.1.0"
+description = "Open-source AI agent for lawyers globally — built on LangGraph"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Brahm", email = "brahmsareen04@gmail.com" }]
+dependencies = [
+    "langgraph>=0.2",
+    "langchain-core",
+    "langchain-community",
+    "langchain-litellm",
+    "litellm[caching]",
+    "diskcache>=5.6",
+    "typer[all]",
+    "pydantic-settings",
+    "rich",
+    "python-dotenv",
+    "playwright>=1.59.0",
+    "pyyaml>=6.0",
+    "rank-bm25>=0.2",
+    "scikit-learn>=1.4",
+    "numpy>=1.26",
+    "python-docx>=1.1",
+    "pdfplumber>=0.11",
+    "python-telegram-bot[job-queue]>=21.0",
+    # Phase 9: Persistent core
+    "langgraph-checkpoint-postgres>=2.0",
+    "psycopg[binary,pool]>=3.1",
+    "qdrant-client>=1.9",
+    "sentence-transformers>=3.0",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "python-multipart>=0.0.9",
+    "apscheduler>=3.10",
+]
+
+[project.optional-dependencies]
+# Phase 9B: Voice AI Gateway — STT + TTS providers + Twilio phone gateway.
+# Install with: uv sync --extra voice
+# WHY optional: lawyers who use Telegram-only don't pay the install weight
+# of deepgram-sdk, elevenlabs, or twilio.
+voice = [
+    "deepgram-sdk>=3.0",       # DeepgramSTT backend (DEEPGRAM_API_KEY)
+    "elevenlabs>=1.0",         # ElevenLabsTTS backend (ELEVENLABS_API_KEY)
+    "google-cloud-texttospeech>=2.0",  # GoogleTTS backend
+    "twilio>=9.0",             # Twilio phone gateway
+    "openai>=1.0",             # WhisperSTT backend (reuses OPENAI_API_KEY)
+    "httpx>=0.27",             # HTTP client for TTS/STT REST calls
+]
+
+[project.scripts]
+lex = "lexagent.cli:app"
+
+[tool.uv]
+dev-dependencies = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "mypy>=1.8",
+    "ruff>=0.3",
+    "playwright>=1.59.0",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
+
+[tool.mypy]
+python_version = "3.11"
+strict = false
+ignore_missing_imports = true
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

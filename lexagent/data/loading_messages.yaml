@@ -1,0 +1,49 @@
+# Contextual progress messages shown in Telegram during graph execution.
+# {placeholders} are filled from state fields at runtime.
+# A random message is selected from each node's pool each time.
+
+intake:
+  - "📋 Analysing your brief…"
+  - "📋 Reading your matter brief…"
+  - "📋 Identifying matter type and parties…"
+
+research:
+  - "🔍 Searching Indian Kanoon for {matter_type} precedents in {jurisdiction}…"
+  - "🔍 Pulling Supreme Court and High Court judgments on {purpose}…"
+  - "🔍 Researching {matter_type} — checking relevant case law…"
+  - "📚 Reading judgments and extracting relevant citations…"
+  - "⚖️ Running limitation analysis and statute check…"
+
+draft:
+  - "✍️ Drafting your {matter_type} for {jurisdiction}…"
+  - "✍️ Building your {matter_type} — this takes about 30 seconds…"
+  - "⚖️ Writing the {matter_type} with verified citations…"
+  - "📝 Composing the draft with your instructions and case law…"
+
+cite:
+  - "📌 Verifying citations against Indian Kanoon corpus…"
+  - "📌 Cross-referencing citations — checking every case number…"
+  - "🔎 Grounding each citation to a source chunk…"
+
+review:
+  - "✅ Final review — checking length, citations, and structure…"
+  - "✅ Quality check in progress…"
+  - "✅ Validating draft against {jurisdiction} filing guidelines…"
+
+contract_review:
+  - "📄 Analysing contract clauses for risk…"
+  - "📄 Reading the contract — identifying non-standard terms…"
+  - "📄 Running clause-by-clause risk analysis…"
+
+skill_loaded:
+  - "📚 Loaded: {skill_name} skill"
+  - "📚 Using {skill_name} drafting rules"
+
+kanoon_results:
+  found: "✅ Found {count} relevant judgment(s). Proceeding to draft…"
+  none: "⚠️ Indian Kanoon returned no results for this query."
+  stub: "ℹ️ Research running in stub mode — enable LEX_KANOON_BACKEND=playwright for live data."
+
+limitation:
+  ok: "📅 Limitation check: {analysis}"
+  warning: "⚠️ Limitation concern: {analysis}"
