@@ -13,6 +13,7 @@ from lexagent.state import LexState
 # Tools self-register on first import — no explicit registration call needed.
 import lexagent.tools.limitation  # noqa: F401
 from lexagent.tools.kanoon import search_and_fetch
+from lexagent.tools.kanoon_api import search_and_fetch_api
 from lexagent.tools.registry import ToolRegistry
 
 console = Console()
@@ -92,6 +93,19 @@ async def run(state: LexState) -> dict:
                     "status": "stub",
                 }
             ]
+        elif config.kanoon_backend == "api":
+            # WHY: REST API is stable and fast; Playwright breaks on page-structure changes.
+            # Requires KANOON_API_KEY in .env. Falls back gracefully if key is absent.
+            if not config.kanoon_api_key:
+                console.print("[yellow]→ Kanoon API:[/yellow] KANOON_API_KEY not set — skipping.")
+                kanoon_result = {"results": []}
+            else:
+                kanoon_result = await search_and_fetch_api(
+                    query=query,
+                    api_key=config.kanoon_api_key,
+                    max_results=config.kanoon_max_results,
+                    base_url=config.kanoon_api_base_url,
+                )
         else:
             kanoon_result = await search_and_fetch(
                 query=query,

@@ -60,6 +60,9 @@ class LexConfig(BaseSettings):
     # Indian Kanoon
     kanoon_backend: str = Field("stub", validation_alias=AliasChoices("LEX_KANOON_BACKEND", "kanoon_backend"))
     kanoon_api_key: Optional[str] = Field(None, validation_alias=AliasChoices("KANOON_API_KEY", "kanoon_api_key"))
+    # WHY: kanoon_api_base_url is overridden in tests to point at a respx mock server
+    # so no live HTTP calls are made. Production value is the official Kanoon API base.
+    kanoon_api_base_url: str = Field("https://api.indiankanoon.org", validation_alias=AliasChoices("KANOON_API_BASE_URL", "kanoon_api_base_url"))
     kanoon_mcp_server: str = Field("E-courts", validation_alias=AliasChoices("LEX_KANOON_MCP", "kanoon_mcp_server"))
     # WHY: headless=False by default so lawyers can watch the browser during research.
     # Set LEX_KANOON_HEADLESS=true in .env for background / CI runs.
