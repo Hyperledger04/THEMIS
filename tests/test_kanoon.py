@@ -1,11 +1,7 @@
 """
-Smoke tests for the Kanoon Playwright browser tool.
-
-WHY these two tests are skipped: Indian Kanoon changed its page structure so
-the `.judgments` div selector no longer matches — the scraper returns
-"Judgment div not found". These are live-browser integration tests that
-need the Playwright backend repaired. Use test_kanoon_api.py (REST API
-client, fully mocked) for offline CI coverage instead.
+Live Playwright smoke tests for the Indian Kanoon scraper.
+These tests open a real headed/headless Chrome — they require internet access.
+Run with: pytest tests/test_kanoon.py -v
 """
 
 import pytest
@@ -17,16 +13,12 @@ async def test_search_returns_results():
     result = await search_and_fetch(
         query="landlord tenant eviction Delhi High Court",
         max_results=2,
-        headless=True,  # always headless in tests
+        headless=True,
     )
     assert "results" in result
     assert len(result["results"]) > 0, "Expected at least one result from Indian Kanoon"
 
 
-@pytest.mark.skip(
-    reason="Indian Kanoon changed page structure; .judgments selector broken. "
-    "Fix tracked as Playwright scraper update. Use test_kanoon_api.py for CI coverage."
-)
 @pytest.mark.asyncio
 async def test_judgment_has_full_text():
     result = await search_and_fetch(
@@ -40,10 +32,6 @@ async def test_judgment_has_full_text():
     assert len(first.get("full_text", "")) > 500, "Judgment text too short — likely not scraped"
 
 
-@pytest.mark.skip(
-    reason="Indian Kanoon changed page structure; .judgments selector broken. "
-    "Fix tracked as Playwright scraper update. Use test_kanoon_api.py for CI coverage."
-)
 @pytest.mark.asyncio
 async def test_citations_extracted():
     result = await search_and_fetch(
@@ -52,5 +40,4 @@ async def test_citations_extracted():
         headless=True,
     )
     first = result["results"][0] if result["results"] else {}
-    # citations_found can be empty for older judgments — just assert the key exists
     assert "citations_found" in first, "citations_found key missing from result"
