@@ -122,3 +122,45 @@ def test_zero_similarity_threshold_returns_results():
     r = HybridRetriever.from_findings(_SAMPLE_FINDINGS, similarity_threshold=0.0)
     results = r.retrieve("property")
     assert len(results) > 0
+
+
+# ---------------------------------------------------------------------------
+# PersistentQdrantRetriever — CRIT-01 score gate
+# ---------------------------------------------------------------------------
+
+def test_persistent_qdrant_retriever_passes_score_threshold_to_query_points(monkeypatch):
+    """CRIT-01: retrieve() must forward score_threshold to query_points so
+    low-similarity Qdrant results never enter the cite node corpus."""
+    from unittest.mock import MagicMock
+    from lexagent.tools.retriever import PersistentQdrantRetriever
+
+    # Build a minimal cfg with the threshold we want to assert.
+    cfg = MagicMock()
+    cfg.qdrant_url = "http://localhost:6333"
+    cfg.qdrant_api_key = None
+    cfg.embedding_model = "all-MiniLM-L6-v2"
+    cfg.embedding_dim = 384
+    cfg.retriever_similarity_threshold = 0.42  # sentinel value
+
+    # Patch the embedding model so no network call is made.
+    # WHY: encode()[0].tolist() is called in retriever.py — plain list has no
+    # .tolist(), so we use numpy to match the SentenceTransformer return type.
+    import numpy as np
+    mock_model = MagicMock()
+    mock_model.encode.return_value = np.array([[0.1] * 384])
+
+    # Patch the Qdrant client; capture what query_points was called with.
+    mock_client = MagicMock()
+    mock_client.query_points.return_value = MagicMock(points=[])
+
+    qr = PersistentQdrantRetriever("M-test", firm_id="firm1", cfg=cfg)
+    qr._model = mock_model
+    qr._client = mock_client
+
+    qr.retrieve("cheque bounce", top_k=3)
+
+    call_kwargs = mock_client.query_points.call_args.kwargs
+    assert call_kwargs.get("score_threshold") == 0.42, (
+        "PersistentQdrantRetriever.retrieve() must pass score_threshold to query_points "
+        "so low-similarity results are filtered before entering the cite node corpus."
+    )

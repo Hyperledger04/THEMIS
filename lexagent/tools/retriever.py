@@ -296,10 +296,15 @@ class PersistentQdrantRetriever:
             model = self._get_model()
             client = self._get_client()
             query_vec = model.encode([query], show_progress_bar=False)[0].tolist()
+            # WHY: score_threshold filters out low-similarity results before they
+            # enter the cite node corpus. Without this gate, Qdrant returns the
+            # top-k closest vectors regardless of actual similarity — an unrelated
+            # chunk could pass BM25 scoring later and be marked verified=True.
             results = client.query_points(
                 collection_name=self._collection,
                 query=query_vec,
                 limit=top_k,
+                score_threshold=self._cfg.retriever_similarity_threshold,
             )
             return [hit.payload for hit in results.points]
         except Exception:
