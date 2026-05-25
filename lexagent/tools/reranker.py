@@ -29,12 +29,12 @@ class LLMReranker:
     batched prompt (one API call regardless of the number of passages).
 
     Usage:
-        reranker = LLMReranker(llm=get_llm(cfg), top_k=5)
+        reranker = LLMReranker(cfg=cfg, top_k=5)
         reranked = await reranker.rerank(query, results)
     """
 
-    def __init__(self, llm, top_k: int = 5) -> None:
-        self._llm = llm
+    def __init__(self, cfg, top_k: int = 5) -> None:
+        self._cfg = cfg
         self._top_k = top_k
 
     async def rerank(
@@ -84,9 +84,9 @@ class LLMReranker:
             f"Passages:\n{passages_text}"
         )
 
-        response = await self._llm.ainvoke(prompt)
-        raw = response.content if hasattr(response, "content") else str(response)
-        return _parse_scores(raw, expected_count=len(results))
+        from lexagent.nodes._llm import call_llm
+        result = await call_llm([{"role": "user", "content": prompt}], self._cfg)
+        return _parse_scores(result["content"], expected_count=len(results))
 
 
 def _parse_scores(raw: str, expected_count: int) -> list[float]:

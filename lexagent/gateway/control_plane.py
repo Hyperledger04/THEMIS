@@ -20,7 +20,6 @@ from typing import Optional
 from fastapi import Depends, FastAPI, Header, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
 
 from lexagent.config import LexConfig
@@ -144,7 +143,7 @@ async def send_message(
     state: LexState = {
         "user_input": body.text,
         "matter_id": matter_id,
-        "messages": [HumanMessage(content=body.text)],
+        "messages": [{"role": "user", "content": body.text}],
         "firm_id": auth["firm_id"],
         "user_id": auth["user_id"],
     }
@@ -296,7 +295,7 @@ async def ws_endpoint(
         state: LexState = {
             "user_input": user_text,
             "matter_id": matter_id,
-            "messages": [HumanMessage(content=user_text)],
+            "messages": [{"role": "user", "content": user_text}],
             "firm_id": cfg.default_firm_id,
             "user_id": user_id,
         }

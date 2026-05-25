@@ -25,6 +25,21 @@ class LexConfig(BaseSettings):
 
     default_model: str = Field("claude-sonnet-4-6", validation_alias=AliasChoices("LEX_MODEL", "default_model"))
     model_provider: str = Field("anthropic", validation_alias=AliasChoices("LEX_MODEL_PROVIDER", "model_provider"))
+    # Path to the YAML config file written by `lex config` wizard.
+    # WHY: ~/.lexagent/config.yaml is the user-facing config that survives .env changes.
+    # .env still overrides everything — this is just the persisted default for the wizard.
+    config_yaml: str = Field("~/.lexagent/config.yaml", validation_alias=AliasChoices("LEX_CONFIG_YAML", "config_yaml"))
+
+    # WHY: chat_model lets lawyers use a faster/cheaper model for conversational turns
+    # (question-answering, routing decisions) while the full model drafts documents.
+    # Example: LEX_CHAT_MODEL=anthropic/claude-haiku-4-5-20251001 halves chat latency.
+    # Defaults to None → falls back to the full default_model.
+    chat_model: Optional[str] = Field(None, validation_alias=AliasChoices("LEX_CHAT_MODEL", "chat_model"))
+    # T1-B: how many past chat messages to reload on startup (per-day session window).
+    chat_history_limit: int = Field(20, validation_alias=AliasChoices("LEX_CHAT_HISTORY_LIMIT", "chat_history_limit"))
+    # T2-C: when True, skip all clarifying-question prompts for complete briefs and
+    # run the full pipeline uninterrupted (intake→research→draft→cite→review).
+    autonomous_mode: bool = Field(False, validation_alias=AliasChoices("LEX_AUTONOMOUS_MODE", "autonomous_mode"))
     # WHY: model_base_url enables local models (Ollama) and custom endpoints
     # without any code changes — just set the URL in .env.
     model_base_url: Optional[str] = Field(None, validation_alias=AliasChoices("LEX_MODEL_BASE_URL", "model_base_url"))
@@ -48,6 +63,8 @@ class LexConfig(BaseSettings):
     skills_dir: str = Field("~/.lexagent/skills", validation_alias=AliasChoices("LEX_SKILLS_DIR", "skills_dir"))
     matters_dir: str = Field("~/.lexagent/matters", validation_alias=AliasChoices("LEX_MATTERS_DIR", "matters_dir"))
     sessions_db: str = Field("~/.lexagent/sessions.db", validation_alias=AliasChoices("LEX_SESSIONS_DB", "sessions_db"))
+    agents_dir: str = Field("~/.lexagent/agents", validation_alias=AliasChoices("LEX_AGENTS_DIR", "agents_dir"))
+    playbooks_dir: str = Field("~/.lexagent/playbooks", validation_alias=AliasChoices("LEX_PLAYBOOKS_DIR", "playbooks_dir"))
 
     # ----------------------------------------------------------------
     # Legal Data Sources — BYOK / BYO-MCP
@@ -157,6 +174,44 @@ class LexConfig(BaseSettings):
     # ----------------------------------------------------------------
     default_firm_id: str = Field("default", validation_alias=AliasChoices("LEX_FIRM_ID", "default_firm_id"))
     multi_tenant: bool = Field(False, validation_alias=AliasChoices("LEX_MULTI_TENANT", "multi_tenant"))
+
+    # ----------------------------------------------------------------
+    # Phase R1: Research Overhaul — Tavily + Playwright fallback + judgment cache
+    # ----------------------------------------------------------------
+    tavily_api_key: Optional[str] = Field(None, validation_alias=AliasChoices("TAVILY_API_KEY", "tavily_api_key"))
+    tavily_enabled: bool = Field(False, validation_alias=AliasChoices("LEX_TAVILY_ENABLED", "tavily_enabled"))
+    # WHY: fallback=True means Playwright opens only when the API returns empty text —
+    # not for every request. Set False in CI to skip browser completely.
+    kanoon_fallback_playwright: bool = Field(True, validation_alias=AliasChoices("LEX_KANOON_FALLBACK", "kanoon_fallback_playwright"))
+    react_research_max_iterations: int = Field(5, validation_alias=AliasChoices("LEX_REACT_MAX_ITER", "react_research_max_iterations"))
+    judgments_cache_dir: str = Field("~/.lexagent/judgments", validation_alias=AliasChoices("LEX_JUDGMENTS_CACHE", "judgments_cache_dir"))
+
+    # ----------------------------------------------------------------
+    # Phase S2: Security Foundation
+    # WHY: All security fields default to None/False so personal mode needs
+    # zero configuration. Enterprise mode enforces required fields at startup.
+    # ----------------------------------------------------------------
+    encryption_key: Optional[str] = Field(None, validation_alias=AliasChoices("LEX_ENCRYPTION_KEY", "encryption_key"))
+    require_tls: bool = Field(False, validation_alias=AliasChoices("LEX_REQUIRE_TLS", "require_tls"))
+    cors_origins: List[str] = Field(
+        default_factory=lambda: ["http://localhost:3000", "http://localhost:8080"],
+        validation_alias=AliasChoices("LEX_CORS_ORIGINS", "cors_origins"),
+    )
+    csp_policy: Optional[str] = Field(None, validation_alias=AliasChoices("LEX_CSP_POLICY", "csp_policy"))
+    secrets_backend: str = Field("env", validation_alias=AliasChoices("LEX_SECRETS_BACKEND", "secrets_backend"))
+    vault_url: Optional[str] = Field(None, validation_alias=AliasChoices("LEX_VAULT_URL", "vault_url"))
+    vault_token: Optional[str] = Field(None, validation_alias=AliasChoices("LEX_VAULT_TOKEN", "vault_token"))
+    aws_region: Optional[str] = Field(None, validation_alias=AliasChoices("LEX_AWS_REGION", "aws_region"))
+    jwt_algorithm: str = Field("HS256", validation_alias=AliasChoices("LEX_JWT_ALGORITHM", "jwt_algorithm"))
+    jwt_expiry_hours: int = Field(24, validation_alias=AliasChoices("LEX_JWT_EXPIRY_HOURS", "jwt_expiry_hours"))
+    rate_limit_global: int = Field(100, validation_alias=AliasChoices("LEX_RATE_LIMIT_GLOBAL", "rate_limit_global"))
+    rate_limit_user: int = Field(20, validation_alias=AliasChoices("LEX_RATE_LIMIT_USER", "rate_limit_user"))
+    rate_limit_draft: int = Field(5, validation_alias=AliasChoices("LEX_RATE_LIMIT_DRAFT", "rate_limit_draft"))
+    max_daily_spend_usd: float = Field(0.0, validation_alias=AliasChoices("LEX_MAX_DAILY_SPEND_USD", "max_daily_spend_usd"))
+    audit_retain_days: int = Field(2555, validation_alias=AliasChoices("LEX_AUDIT_RETAIN_DAYS", "audit_retain_days"))
+    audit_log_postgres: bool = Field(False, validation_alias=AliasChoices("LEX_AUDIT_POSTGRES", "audit_log_postgres"))
+    # Gateway URL used by thin-client gateways (Telegram, WhatsApp) to POST to control plane
+    control_plane_url: str = Field("http://localhost:8000", validation_alias=AliasChoices("LEX_CONTROL_PLANE_URL", "control_plane_url"))
 
     # ----------------------------------------------------------------
     # Phase 9B: Voice AI Gateway

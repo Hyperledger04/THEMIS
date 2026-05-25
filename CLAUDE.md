@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-LexAgent is an open-source AI agent for Indian litigation practice — built on LangGraph. It takes a matter brief from a lawyer, asks clarifying questions, researches Indian case law, drafts a court-ready document with verified citations, and saves the matter to memory. The full build spec is in `LEXAGENT_CLAUDE_CODE_BRIEF.md`.
+LexAgent is an open-source AI agent for Indian litigation practice — built on LangGraph. It takes a matter brief from a lawyer, asks clarifying questions, researches Indian case law, drafts a court-ready document with verified citations, and saves the matter to memory.
 
 **This is a teaching build. Every non-obvious code pattern gets a comment. Optimise for clarity over cleverness.**
 
@@ -120,5 +120,6 @@ Phases are sequential — complete and test each before starting the next. See `
 | 7 | Telegram gateway | Bot accepts brief, returns draft |
 | 8 | UX Overhaul, Hearing + Deadline Intelligence | — |
 
+Always the CRG to check files, features and edges. Don't use grep, cat or read before checking the CRG. 
 **Current phase: 8 (COMPLETE) — Last completed: Phase 8 (UX overhaul — structured intake question banks, Telegram inline buttons, session persistence, setup wizard, contextual loading messages, .docx auto-delivery, post-draft action menu — 279 tests passing)**
 

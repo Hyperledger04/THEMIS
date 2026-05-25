@@ -31,8 +31,6 @@ from typing import Optional
 
 from fastapi import APIRouter, Form, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, PlainTextResponse
-from langchain_core.messages import HumanMessage, SystemMessage
-
 from lexagent.config import LexConfig
 from lexagent.graph import get_graph
 from lexagent.state import LexState
@@ -96,7 +94,7 @@ async def _run_voice_turn(
         state: LexState = {  # type: ignore[assignment]
             "user_input": user_text,
             "matter_id": session.matter_id,
-            "messages": [HumanMessage(content=f"{field_name}: {user_text}")],
+            "messages": [{"role": "user", "content": f"{field_name}: {user_text}"}],
             "intake_complete": False,
             "voice_session_id": session.session_id,
             "voice_channel": session.channel,
@@ -106,7 +104,7 @@ async def _run_voice_turn(
         state = {  # type: ignore[assignment]
             "user_input": user_text,
             "matter_id": session.matter_id,
-            "messages": [HumanMessage(content=user_text)],
+            "messages": [{"role": "user", "content": user_text}],
             "voice_session_id": session.session_id,
             "voice_channel": session.channel,
         }
@@ -117,7 +115,7 @@ async def _run_voice_turn(
             "matter_id": session.matter_id,
             "intake_complete": False,
             "citations_verified": False,
-            "messages": [HumanMessage(content=user_text)],
+            "messages": [{"role": "user", "content": user_text}],
             "voice_session_id": session.session_id,
             "voice_channel": session.channel,
             "firm_id": cfg.default_firm_id,
@@ -204,26 +202,19 @@ async def _generate_voice_summary(
     Falls back to a canned summary if the LLM call fails.
     """
     try:
-        from lexagent.nodes._llm import get_llm
-        llm = get_llm(cfg)
+        from lexagent.nodes._llm import call_llm
 
         matter_type = state.get("matter_type", "document")
-        jurisdiction = state.get("jurisdiction", "court")
         snippet = draft_text[:800]
 
-        prompt = f"""{_VOICE_DRAFT_SUMMARY_PROMPT}
-
-Draft excerpt:
-{snippet}
-
-Matter type: {matter_type}
-Jurisdiction: {jurisdiction}
-"""
-        resp = await llm.ainvoke([
-            SystemMessage(content=_VOICE_DRAFT_SUMMARY_PROMPT),
-            HumanMessage(content=f"Summarise this draft for voice delivery:\n{snippet}"),
-        ])
-        return str(resp.content).strip()
+        result = await call_llm(
+            [
+                {"role": "system", "content": _VOICE_DRAFT_SUMMARY_PROMPT},
+                {"role": "user", "content": f"Summarise this draft for voice delivery:\n{snippet}"},
+            ],
+            cfg,
+        )
+        return result["content"].strip()
     except Exception as e:
         logger.warning("Voice summary LLM call failed: %s", e)
         matter_type = state.get("matter_type", "document")

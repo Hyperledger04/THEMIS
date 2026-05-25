@@ -114,6 +114,20 @@ def init_db(sessions_db: str = "~/.lexagent/sessions.db") -> None:
                 VALUES ('delete', old.id, old.matter_id, old.matter_type, old.parties, old.jurisdiction, old.purpose, old.summary);
             END;
 
+            -- T1-B: persistent chat history across CLI invocations.
+            -- WHY: LiteLLM chat_model starts fresh each run (messages=[]).
+            -- Storing turns here lets run_chat() resume where it left off.
+            CREATE TABLE IF NOT EXISTS chat_messages (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id  TEXT NOT NULL,
+                role        TEXT NOT NULL,
+                content     TEXT NOT NULL,
+                created_at  TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_chat_messages_session
+            ON chat_messages(session_id, created_at);
+
             CREATE TABLE IF NOT EXISTS schema_version (version INTEGER);
         """)
 
@@ -373,6 +387,56 @@ def delete_reminder(reminder_id: int, sessions_db: str = "~/.lexagent/sessions.d
     with _connect(sessions_db) as conn:
         cursor = conn.execute("DELETE FROM reminders WHERE id = ?", (reminder_id,))
         return cursor.rowcount > 0
+
+
+# ---------------------------------------------------------------------------
+# T1-B + T1-C: Chat history persistence
+# ---------------------------------------------------------------------------
+
+
+def get_today_session_id() -> str:
+    """Session ID for today's chat — one window per calendar day."""
+    return datetime.now().strftime("%Y-%m-%d")
+
+
+def save_chat_message(
+    session_id: str,
+    role: str,
+    content: str,
+    sessions_db: str = "~/.lexagent/sessions.db",
+) -> None:
+    """Persist a single chat turn (user or assistant) to SQLite."""
+    init_db(sessions_db)
+    with _connect(sessions_db) as conn:
+        conn.execute(
+            "INSERT INTO chat_messages (session_id, role, content, created_at) VALUES (?, ?, ?, ?)",
+            (session_id, role, content, datetime.now().isoformat()),
+        )
+
+
+def load_chat_history(
+    session_id: str,
+    limit: int = 20,
+    sessions_db: str = "~/.lexagent/sessions.db",
+) -> List[dict]:
+    """
+    Load the last `limit` messages for a session, oldest-first.
+    Returns list of {role, content} dicts ready to pass to LiteLLM.
+    """
+    init_db(sessions_db)
+    with _connect(sessions_db) as conn:
+        rows = conn.execute(
+            """
+            SELECT role, content FROM (
+                SELECT role, content, created_at FROM chat_messages
+                WHERE session_id = ?
+                ORDER BY created_at DESC
+                LIMIT ?
+            ) ORDER BY created_at ASC
+            """,
+            (session_id, limit),
+        ).fetchall()
+        return [{"role": row["role"], "content": row["content"]} for row in rows]
 
 
 def get_due_reminders(sessions_db: str = "~/.lexagent/sessions.db") -> List[dict]:

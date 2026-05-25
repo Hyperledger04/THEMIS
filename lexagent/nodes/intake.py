@@ -10,11 +10,8 @@ from pathlib import Path
 from typing import Optional
 
 import yaml
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-
 from lexagent.config import LexConfig
 from lexagent.memory.soul import load_soul
-from lexagent.nodes._llm import get_llm
 from lexagent.skills.loader import load_skill
 from lexagent.state import LexState
 
@@ -252,10 +249,24 @@ async def run(state: LexState) -> dict:
     """
     try:
         if _all_core_fields_present(state) and _matter_type_complete(state):
-            return {"intake_complete": True}
+            # Fast-exit: all fields already present. Still load the skill so the
+            # draft node gets it — skipping this was why skills never applied to
+            # well-specified briefs.
+            updates: dict = {"intake_complete": True}
+            if not state.get("active_skill"):
+                config = LexConfig()
+                bundled_skills = Path(__file__).parent.parent / "skills"
+                skill_content = load_skill(
+                    state.get("matter_type") or "",
+                    bundled_skills_dir=bundled_skills,
+                    user_skills_dir=config.skills_dir,
+                )
+                if skill_content:
+                    updates["active_skill"] = skill_content
+                    updates["active_skill_name"] = _skill_display_name(state.get("matter_type") or "")
+            return updates
 
         config = LexConfig()
-        llm = get_llm(config)
 
         lawyer_soul = state.get("lawyer_soul")
         if not lawyer_soul:
@@ -268,16 +279,18 @@ async def run(state: LexState) -> dict:
         bank_section = _build_question_bank_prompt(matter_type, question_bank, state, lawyer_soul)
         system_prompt = _build_system_prompt(matter_type, bank_section)
 
-        messages = [SystemMessage(content=system_prompt)]
-        messages.append(HumanMessage(content=state["user_input"]))
+        messages: list[dict] = [{"role": "system", "content": system_prompt}]
+        messages.append({"role": "user", "content": state["user_input"]})
         for msg in state.get("messages", []):
             messages.append(msg)
 
-        response = await llm.ainvoke(messages)
-        extracted = _parse_extraction(response.content)
+        from lexagent.nodes._llm import call_llm
+        result = await call_llm(messages, config)
+        response_text = result["content"]
+        extracted = _parse_extraction(response_text)
 
         updates: dict = {
-            "messages": [AIMessage(content=response.content)],
+            "messages": list(state.get("messages", [])) + [{"role": "assistant", "content": response_text}],
             "intake_complete": False,
             "lawyer_soul": lawyer_soul,
         }
@@ -317,12 +330,24 @@ async def run(state: LexState) -> dict:
             # Also populate legacy plain-text list for non-Telegram consumers
             updates["clarifying_questions"] = [q["question"] if isinstance(q, dict) else q for q in raw_questions]
 
-        # Check completion after applying all extracted fields
+        # T1-D: one-shot fast-path — complete immediately when all core fields are
+        # present AND the LLM itself decided no questions are needed.
+        # WHY: _matter_type_complete() requires every question bank field (e.g.
+        # fundamental_right, bail_type) which a concise brief won't include.
+        # Trusting the LLM's own empty-question judgement avoids unnecessary friction
+        # while still respecting question bank requirements when fields are genuinely absent.
         merged = {**state, **updates}
-        if _all_core_fields_present(merged) and _matter_type_complete(merged):
-            updates["intake_complete"] = True
-            updates["pending_questions"] = []
-            updates["clarifying_questions"] = []
+        if _all_core_fields_present(merged):
+            if not raw_questions:
+                # LLM sees enough — proceed without any questions
+                updates["intake_complete"] = True
+                updates["pending_questions"] = []
+                updates["clarifying_questions"] = []
+            elif _matter_type_complete(merged):
+                # Full question bank satisfied
+                updates["intake_complete"] = True
+                updates["pending_questions"] = []
+                updates["clarifying_questions"] = []
 
         return updates
 

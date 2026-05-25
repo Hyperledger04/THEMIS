@@ -23,7 +23,6 @@ from pathlib import Path
 from typing import Optional
 
 import yaml
-from langchain_core.messages import HumanMessage
 from rich.console import Console
 from telegram import (
     Document,
@@ -394,7 +393,7 @@ async def _run_graph_for_user(
         state: LexState = {  # type: ignore[assignment]
             "user_input": initial_brief,
             "matter_id": session.matter_id,
-            "messages": [HumanMessage(content=initial_brief)],
+            "messages": [{"role": "user", "content": initial_brief}],
             "intake_complete": _prior_complete,
             "draft_output": None,
             "plain_english_summary": None,
@@ -408,7 +407,7 @@ async def _run_graph_for_user(
             "matter_id": session.matter_id,
             "intake_complete": False,
             "citations_verified": False,
-            "messages": [HumanMessage(content=initial_brief)],
+            "messages": [{"role": "user", "content": initial_brief}],
             "workflow_mode": workflow_mode,
             "contract_upload_path": contract_upload_path,
             "telegram_user_id": user_id,

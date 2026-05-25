@@ -1,7 +1,8 @@
 """Tests for lexagent/tools/raptor_summarizer.py"""
 import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, patch
 
+from lexagent.config import LexConfig
 from lexagent.tools.chunker import Chunk
 from lexagent.tools.raptor_summarizer import (
     RaptorNode,
@@ -10,13 +11,9 @@ from lexagent.tools.raptor_summarizer import (
 )
 
 
-def _make_llm(summary_text: str = "Doctrinal summary.") -> MagicMock:
-    """Return a mock LLM whose ainvoke() returns a fixed summary."""
-    llm = MagicMock()
-    response = MagicMock()
-    response.content = summary_text
-    llm.ainvoke = AsyncMock(return_value=response)
-    return llm
+def _make_summarizer(summary_text: str = "Doctrinal summary.", max_layers: int = 2, max_cluster_size: int = 5) -> RaptorSummarizer:
+    cfg = LexConfig()
+    return RaptorSummarizer(cfg=cfg, max_layers=max_layers, max_cluster_size=max_cluster_size)
 
 
 def _make_chunks(n: int) -> list[Chunk]:
@@ -31,13 +28,21 @@ def _make_chunks(n: int) -> list[Chunk]:
     ]
 
 
+def _mock_call_llm(summary_text: str = "Doctrinal summary."):
+    return patch(
+        "lexagent.nodes._llm.call_llm",
+        new_callable=AsyncMock,
+        return_value={"content": summary_text, "tool_calls": None},
+    )
+
+
 # -----------------------------------------------------------------------
 # build_tree — empty input
 # -----------------------------------------------------------------------
 
 @pytest.mark.asyncio
 async def test_build_tree_empty():
-    summarizer = RaptorSummarizer(llm=_make_llm(), max_layers=2)
+    summarizer = _make_summarizer()
     tree = await summarizer.build_tree([])
     assert tree == []
 
@@ -48,10 +53,10 @@ async def test_build_tree_empty():
 
 @pytest.mark.asyncio
 async def test_build_tree_single_chunk():
-    summarizer = RaptorSummarizer(llm=_make_llm(), max_layers=2)
+    summarizer = _make_summarizer()
     chunks = _make_chunks(1)
-    tree = await summarizer.build_tree(chunks)
-    # At least the leaf node should be present
+    with _mock_call_llm():
+        tree = await summarizer.build_tree(chunks)
     assert len(tree) >= 1
     assert tree[0].layer == 0
 
@@ -62,10 +67,10 @@ async def test_build_tree_single_chunk():
 
 @pytest.mark.asyncio
 async def test_build_tree_produces_summary():
-    summarizer = RaptorSummarizer(llm=_make_llm("Summary of cluster."), max_layers=1, max_cluster_size=2)
+    summarizer = _make_summarizer(max_layers=1, max_cluster_size=2)
     chunks = _make_chunks(6)
-    tree = await summarizer.build_tree(chunks)
-    # Should have both layer-0 leaves and at least one layer-1 summary
+    with _mock_call_llm("Summary of cluster."):
+        tree = await summarizer.build_tree(chunks)
     layers = {n.layer for n in tree}
     assert 0 in layers
     assert 1 in layers
@@ -74,9 +79,10 @@ async def test_build_tree_produces_summary():
 @pytest.mark.asyncio
 async def test_build_tree_summary_text_from_llm():
     expected = "Key legal principle from these cases."
-    summarizer = RaptorSummarizer(llm=_make_llm(expected), max_layers=1, max_cluster_size=3)
+    summarizer = _make_summarizer(max_layers=1, max_cluster_size=3)
     chunks = _make_chunks(4)
-    tree = await summarizer.build_tree(chunks)
+    with _mock_call_llm(expected):
+        tree = await summarizer.build_tree(chunks)
     summaries = [n.text for n in tree if n.layer == 1]
     assert any(expected in s for s in summaries)
 
@@ -87,12 +93,11 @@ async def test_build_tree_summary_text_from_llm():
 
 @pytest.mark.asyncio
 async def test_build_tree_llm_failure_graceful():
-    llm = MagicMock()
-    llm.ainvoke = AsyncMock(side_effect=RuntimeError("API down"))
-    summarizer = RaptorSummarizer(llm=llm, max_layers=1, max_cluster_size=2)
+    summarizer = _make_summarizer(max_layers=1, max_cluster_size=2)
     chunks = _make_chunks(4)
-    # Should not raise; falls back to truncated first-node text
-    tree = await summarizer.build_tree(chunks)
+    with patch("lexagent.nodes._llm.call_llm", new_callable=AsyncMock) as mock_llm:
+        mock_llm.side_effect = RuntimeError("API down")
+        tree = await summarizer.build_tree(chunks)
     assert isinstance(tree, list)
 
 
@@ -106,14 +111,15 @@ async def test_build_tree_from_findings():
         {"citation": "AIR 1978 SC 597", "full_text": "Property dispute judgment content. " * 20},
         {"case_name": "State v Raj", "snippet": "Injunction granted on property grounds. " * 10},
     ]
-    summarizer = RaptorSummarizer(llm=_make_llm("Property law doctrine."), max_layers=1, max_cluster_size=5)
-    tree = await summarizer.build_tree_from_findings(findings)
+    summarizer = _make_summarizer(max_layers=1, max_cluster_size=5)
+    with _mock_call_llm("Property law doctrine."):
+        tree = await summarizer.build_tree_from_findings(findings)
     assert isinstance(tree, list)
 
 
 @pytest.mark.asyncio
 async def test_build_tree_from_findings_empty():
-    summarizer = RaptorSummarizer(llm=_make_llm(), max_layers=1)
+    summarizer = _make_summarizer(max_layers=1)
     tree = await summarizer.build_tree_from_findings([])
     assert tree == []
 
@@ -128,7 +134,6 @@ def test_raptor_tree_to_findings_filters_layer0():
         RaptorNode(layer=1, text="Summary text.", source_chunks=["doc::0"]),
     ]
     findings = raptor_tree_to_findings(tree)
-    # Only layer >= 1 nodes should appear
     assert len(findings) == 1
     assert findings[0]["source"] == "raptor_summary"
     assert "Summary text" in findings[0]["full_text"]

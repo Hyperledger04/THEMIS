@@ -2,17 +2,43 @@
 # Phase 1 produces a clean draft without research (no real citations yet).
 # Phase 3 adds: skill injection, matter memory in user turn, LiteLLM caching.
 # Phase 4 will enrich with verified case law from research_findings.
+# T1-A: live token streaming via asyncio.Queue side-channel.
 
+import asyncio
 import importlib.resources
 from pathlib import Path
 from typing import Optional
 
 import litellm
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from lexagent.config import LexConfig
-from lexagent.nodes._llm import get_llm
 from lexagent.state import LexState
+
+
+# ---------------------------------------------------------------------------
+# Live streaming registry
+# WHY: asyncio.Queue can't live in TypedDict (not JSON-serializable).
+# The chat/CLI layer pre-registers a queue keyed by matter_id before
+# graph.astream(). draft.run() looks up the queue and writes tokens to it.
+# Sentinel None signals stream end.
+# ---------------------------------------------------------------------------
+
+_DRAFT_STREAMS: dict[str, asyncio.Queue] = {}
+
+
+def register_draft_stream(matter_id: str) -> asyncio.Queue:
+    """Pre-register a token queue before graph.astream(). Returns the queue."""
+    q: asyncio.Queue = asyncio.Queue()
+    _DRAFT_STREAMS[matter_id] = q
+    return q
+
+
+def get_draft_stream(matter_id: str) -> Optional[asyncio.Queue]:
+    return _DRAFT_STREAMS.get(matter_id)
+
+
+def unregister_draft_stream(matter_id: str) -> None:
+    _DRAFT_STREAMS.pop(matter_id, None)
 
 
 # ---------------------------------------------------------------------------
@@ -41,6 +67,7 @@ def build_system_prompt_blocks(
     soul: Optional[dict],
     skill_content: Optional[str],
     use_cache_control: bool,
+    agent: Optional[dict] = None,
 ) -> "list | str":
     """
     Build the system prompt in the format needed for the chosen caching path.
@@ -50,15 +77,40 @@ def build_system_prompt_blocks(
                               Anthropic's servers cache this block → ~10% cost on cache hits.
 
     use_cache_control=False → returns a plain string.
-                              Used with ChatLiteLLM for all other providers.
+                              Used with litellm.acompletion() for all other providers.
                               LiteLLM's disk cache (Layer 1) still applies.
+
+    agent → if an active_agent persona is set, its persona description is injected
+            between SOUL.md and the skill so the model embodies the agent's character.
     """
-    # Build the combined content: SOUL.md first, then skill
+    # Build the combined content: SOUL.md → agent persona → skill
     parts = []
     if soul and soul.get("raw"):
-        parts.append(f"## Your Lawyer Profile\n{soul['raw']}")
+        parts.append(
+            f"## Your Lawyer Profile\n{soul['raw']}\n\n"
+            "**IMPORTANT:** This profile describes YOU — the lawyer using LexAgent. "
+            "It is NOT necessarily the signing advocate for this document. "
+            "If the matter brief or parties specify a different advocate (e.g. 'through Adv. Neha Arora'), "
+            "use that advocate's name and details in the signature block, not your profile name."
+        )
     elif soul and isinstance(soul, str):
-        parts.append(f"## Your Lawyer Profile\n{soul}")
+        parts.append(
+            f"## Your Lawyer Profile\n{soul}\n\n"
+            "**IMPORTANT:** This profile describes YOU — the lawyer using LexAgent. "
+            "If the matter brief specifies a different signing advocate, use their details in the document."
+        )
+
+    # WHY: Agent persona comes after SOUL (which grounds identity) but before skill
+    # (which governs structure) so the model knows WHO it is before HOW to draft.
+    if agent and agent.get("persona"):
+        agent_name = agent.get("full_name") or agent.get("name") or agent["id"]
+        tone_line = f"\n**Tone:** {agent['tone']}" if agent.get("tone") else ""
+        parts.append(
+            f"## Active Advocate Persona — @{agent['id']}\n"
+            f"You are embodying the persona of **{agent_name}**."
+            f"{tone_line}\n\n"
+            f"{agent['persona']}"
+        )
 
     if skill_content:
         parts.append(f"## Active Skill\n{skill_content}")
@@ -118,6 +170,7 @@ def _build_string_system_prompt(state: LexState, base_prompt: str) -> str:
         soul=state.get("lawyer_soul"),
         skill_content=state.get("active_skill"),
         use_cache_control=False,
+        agent=state.get("active_agent"),
     )
 
     return (
@@ -132,15 +185,21 @@ def _build_string_system_prompt(state: LexState, base_prompt: str) -> str:
 
 
 def _build_draft_instruction(state: LexState) -> str:
-    """Build the user-turn drafting instruction, personalised with lawyer name."""
+    """Build the user-turn drafting instruction, personalised with lawyer name and agent."""
     lawyer_soul = state.get("lawyer_soul")
     lawyer_name = ""
     if isinstance(lawyer_soul, dict):
         lawyer_name = lawyer_soul.get("name", "")
 
+    active_agent = state.get("active_agent")
+    agent_note = ""
+    if active_agent:
+        agent_name = active_agent.get("full_name") or active_agent.get("name") or active_agent["id"]
+        agent_note = f" You are drafting as {agent_name} — embody this persona fully."
+
     instruction = (
         f"Please draft the legal document for the following matter"
-        f"{f' for {lawyer_name}' if lawyer_name else ''}:\n\n"
+        f"{f' for {lawyer_name}' if lawyer_name else ''}.{agent_note}\n\n"
         f"Matter type: {state.get('matter_type')}\n"
         f"Parties: {state.get('parties')}\n"
         f"Jurisdiction: {state.get('jurisdiction')}\n"
@@ -152,6 +211,19 @@ def _build_draft_instruction(state: LexState) -> str:
 
     if state.get("tone_preference"):
         instruction += f"Tone: {state['tone_preference']}\n"
+
+    # Include the full matter brief so specific details (cheque numbers, bank accounts,
+    # advocate names, addresses, dates, etc.) are all available to the model.
+    # This is the source of truth — always prefer details from here over generic placeholders.
+    user_input = state.get("user_input", "")
+    if user_input:
+        instruction += (
+            f"\n\n--- FULL MATTER BRIEF (use ALL specific details from this) ---\n"
+            f"{user_input}\n"
+            f"--- END BRIEF ---\n"
+            "\nNever leave placeholders like [INSERT ...] if the detail is present above. "
+            "Fill every field you have data for. Only use a placeholder when the detail is genuinely absent."
+        )
 
     research = state.get("research_findings")
     if research:
@@ -191,9 +263,14 @@ async def run(state: LexState) -> dict:
     - Anthropic: uses litellm.acompletion() with cache_control for Layer 2 caching
     - All providers: LiteLLM disk cache (Layer 1) from setup_litellm_cache()
 
+    T1-A: tokens are pushed live to _DRAFT_STREAMS[matter_id] so the chat/CLI
+    layer can print them character-by-character while the graph runs.
+
     Input state must have: matter_type, parties, jurisdiction, purpose, intake_complete=True
     Output: draft_output, plain_english_summary
     """
+    matter_id = state.get("matter_id", "")
+    stream_q = get_draft_stream(matter_id)
     try:
         config = LexConfig()
         draft_instruction = _build_draft_instruction(state)
@@ -201,7 +278,6 @@ async def run(state: LexState) -> dict:
         # Always inject matter memory into the user turn — for ALL providers.
         # WHY user turn: see inject_memory_into_user_turn() docstring.
         from lexagent.memory.matter_memory import load_matter_memory
-        matter_id = state.get("matter_id")
         matter_mem = load_matter_memory(matter_id, config.matters_dir) if matter_id else None
         draft_instruction = inject_memory_into_user_turn(draft_instruction, matter_mem)
 
@@ -210,15 +286,17 @@ async def run(state: LexState) -> dict:
             and config.enable_prompt_caching
         )
 
+        full_output = ""
+
         if use_anthropic_caching:
             # Layer 2: Anthropic server-side prompt caching via litellm.acompletion()
-            # WHY direct litellm call: ChatLiteLLM passes system as a string.
-            # litellm.acompletion() accepts native Anthropic content block format,
-            # including cache_control — this is the only way to get Layer 2 via LiteLLM.
+            # WHY content blocks: litellm.acompletion() accepts native Anthropic content block
+            # format including cache_control — this is the only way to get Layer 2 caching.
             system_blocks = build_system_prompt_blocks(
                 soul=state.get("lawyer_soul"),
                 skill_content=state.get("active_skill"),
                 use_cache_control=True,
+                agent=state.get("active_agent"),
             )
             messages = [
                 {"role": "system", "content": system_blocks},
@@ -228,31 +306,49 @@ async def run(state: LexState) -> dict:
                 model=f"{config.model_provider}/{config.default_model}",
                 messages=messages,
                 caching=config.enable_prompt_caching,
+                stream=True,
             )
-            full_output = response.choices[0].message.content
+            async for chunk in response:
+                token = (chunk.choices[0].delta.content) or ""
+                if token:
+                    full_output += token
+                    if stream_q is not None:
+                        await stream_q.put(token)
         else:
-            # Layer 1 only: ChatLiteLLM (any provider) + LiteLLM disk cache
+            # Layer 1 only: direct litellm streaming (any provider) + LiteLLM disk cache
             base_prompt = _load_prompt("base_system.md")
             system_prompt_str = _build_string_system_prompt(state, base_prompt)
 
             messages = [
-                SystemMessage(content=system_prompt_str),
-                HumanMessage(content=draft_instruction),
+                {"role": "system", "content": system_prompt_str},
+                {"role": "user", "content": draft_instruction},
             ]
-            llm = get_llm(config)
-            response = await llm.ainvoke(messages)
-            full_output = response.content
+            model_str = f"{config.model_provider}/{config.default_model}"
+            stream_kwargs: dict = {"model": model_str, "messages": messages, "stream": True}
+            if config.model_base_url:
+                stream_kwargs["api_base"] = config.model_base_url
+            response = await litellm.acompletion(**stream_kwargs)
+            async for chunk in response:
+                token = (chunk.choices[0].delta.content) or ""
+                if token:
+                    full_output += token
+                    if stream_q is not None:
+                        await stream_q.put(token)
 
         summary = _extract_summary(full_output)
 
         return {
             "draft_output": full_output,
             "plain_english_summary": summary,
-            "messages": [AIMessage(content=full_output)],
+            "messages": list(state.get("messages", [])) + [{"role": "assistant", "content": full_output}],
         }
 
     except Exception as e:
         return {"error": f"Draft node failed: {e}"}
+    finally:
+        # Always send sentinel so the consumer never hangs waiting for more tokens.
+        if stream_q is not None:
+            await stream_q.put(None)
 
 
 def _extract_summary(draft_text: str) -> str:

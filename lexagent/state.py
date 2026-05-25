@@ -4,13 +4,7 @@
 # When a node returns a dict, LangGraph merges only those keys into the existing state.
 # You never return the full state — just the keys you changed.
 
-from typing import Annotated, List, Optional, TypedDict
-
-from langgraph.graph.message import add_messages
-
-# LANGGRAPH: add_messages is a special reducer for the messages field.
-# Instead of overwriting messages on each update, LangGraph appends new messages.
-# This is how the agent keeps a full conversation history without manual list management.
+from typing import List, Optional, TypedDict
 
 
 class LexState(TypedDict):
@@ -50,9 +44,15 @@ class LexState(TypedDict):
     custody_duration: Optional[str]
 
     # --- Research (Phase 4) ---
+    research_only: Optional[bool]             # If True, graph stops after research node (no draft)
     research_findings: Optional[List[dict]]   # [{case_name, citation, relevance, url, source}]
     statutes_cited: Optional[List[str]]       # ["CPC O.XXXIX R.1&2", "Specific Relief Act S.38"]
     limitation_analysis: Optional[str]        # Limitation period check result (Phase 4)
+
+    # --- ReAct Research + Citation Gate (Phase R1) ---
+    citation_gate_dropped: Optional[List[dict]]  # Findings dropped by the enforcement gate
+    research_agent_trace: Optional[List[dict]]   # [{step, tool, input, output, timestamp}]
+    research_tool_toggles: Optional[dict]        # {kanoon: bool, tavily: bool, ecourts: bool}
 
     # --- Draft (Phase 1+) ---
     document_outline: Optional[str]           # Structural outline (generated before full draft)
@@ -74,10 +74,12 @@ class LexState(TypedDict):
     entity_graph: Optional[dict]              # GraphRAG entity graph for this matter
 
     # --- Phase 7: Routing + Contract Review ---
-    workflow_mode: Optional[str]              # "draft" (default) | "contract_review"
+    workflow_mode: Optional[str]              # "draft" (default) | "contract_review" | "contract_draft"
     contract_upload_path: Optional[str]       # Path to uploaded PDF for contract review
     contract_risk_analysis: Optional[dict]    # Structured risk findings from contract_review node
     contract_review_output: Optional[str]     # Formatted markdown risk report
+    contract_lifecycle: Optional[str]         # "draft"|"under_review"|"redlines_sent"|"executed"|"expired"
+    active_playbook: Optional[str]            # Playbook ID loaded for this contract matter
 
     # --- Phase 8 (Roadmap): Hearing + Deadline Intelligence ---
     # litigation_stage tracks where a criminal matter stands in the procedural timeline.
@@ -93,14 +95,17 @@ class LexState(TypedDict):
     pending_action: Optional[str]             # Post-draft action selected by lawyer
 
     # --- Conversation history ---
-    # LANGGRAPH: Annotated[List, add_messages] tells LangGraph to use the add_messages
-    # reducer instead of overwriting. Every time a node adds to messages, LangGraph
-    # appends — so the full conversation history is always preserved here.
-    messages: Annotated[List, add_messages]
+    # Plain list of OpenAI-format message dicts: {"role": "user"|"assistant"|"system", "content": "..."}
+    # WHY: Using plain dicts instead of LangChain HumanMessage/AIMessage objects removes the
+    # langchain-core dependency and works directly with litellm.acompletion() without conversion.
+    # Nodes that add messages must explicitly append:
+    #   return {"messages": state.get("messages", []) + [{"role": "assistant", "content": text}]}
+    messages: List[dict]
 
     # --- Meta ---
     lawyer_soul: Optional[dict]               # Loaded from ~/.lexagent/SOUL.md (Phase 2)
     active_skill: Optional[str]               # Which skill.md content is active (Phase 3)
+    active_agent: Optional[dict]              # Loaded agent persona (from lex agent system or @mention)
     error: Optional[str]                      # Any error — nodes catch and set this, never raise
     next_node: Optional[str]                  # For explicit routing decisions
     # Phase 8: telegram user_id stored in state so nodes can be traced back to a session

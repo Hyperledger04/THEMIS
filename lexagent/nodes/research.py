@@ -2,6 +2,7 @@
 # limitation check. Runs after intake completes; feeds research_findings
 # and limitation_analysis into the draft node.
 
+import asyncio
 import re
 
 from rich.console import Console
@@ -49,6 +50,50 @@ def _build_search_query(state: LexState) -> str:
     return " ".join(parts)
 
 
+def _build_parallel_queries(state: LexState) -> list[str]:
+    """
+    Build 2-3 complementary search queries for parallel execution.
+    Each angle targets a different retrieval dimension so the combined
+    result set is richer than a single broad query.
+    WHY: Indian Kanoon's BM25 engine is sensitive to query phrasing —
+    splitting matter type + purpose + court into separate queries avoids
+    over-stuffing a single query that dilutes all three signals.
+    """
+    matter_type = state.get("matter_type") or ""
+    purpose = (state.get("purpose") or "")[:120]
+    jurisdiction = state.get("jurisdiction") or ""
+    statutes = state.get("statutes_cited") or []
+    user_input = (state.get("user_input") or "")[:150]
+
+    queries: list[str] = []
+
+    # Primary: matter type + purpose
+    primary = " ".join(p for p in [matter_type, purpose] if p)
+    if primary:
+        queries.append(primary)
+
+    # Secondary: jurisdiction + matter type
+    secondary = " ".join(p for p in [jurisdiction, matter_type] if p)
+    if secondary and secondary != primary:
+        queries.append(secondary)
+
+    # Tertiary: statute-focused (if any statutes already identified)
+    statute_query = " ".join(statutes[:2]) if statutes else ""
+    if statute_query:
+        queries.append(statute_query)
+    elif purpose and jurisdiction:
+        # No statutes yet — use purpose + jurisdiction as third angle
+        third = f"{purpose[:80]} {jurisdiction}"
+        if third not in queries:
+            queries.append(third)
+
+    # Fallback to single query if nothing else built
+    if not queries:
+        queries.append(user_input or "legal matter India")
+
+    return queries[:3]  # cap at 3 to keep latency reasonable
+
+
 def _extract_statutes(results: list[dict]) -> list[str]:
     """Pull statute references from fetched judgment texts."""
     statutes: set[str] = set()
@@ -61,6 +106,15 @@ def _extract_statutes(results: list[dict]) -> list[str]:
 
 async def run(state: LexState) -> dict:
     config = LexConfig()
+
+    # WHY: when kanoon_backend=api, delegate to the ReAct research node which
+    # applies the citation enforcement gate and playwright fallback per-doc.
+    # The gate guarantees every finding has title/url/doc_excerpt/citation before
+    # reaching the draft node — impossible to guarantee in the legacy path below.
+    if config.kanoon_backend == "api":
+        from lexagent.nodes.react_research import run as react_run
+        return await react_run(state)
+
     try:
         query = _build_search_query(state)
         console.print(f"[bold blue]→ Research:[/bold blue] {query[:80]}")
@@ -107,14 +161,54 @@ async def run(state: LexState) -> dict:
                     base_url=config.kanoon_api_base_url,
                 )
         else:
-            kanoon_result = await search_and_fetch(
-                query=query,
-                max_results=config.kanoon_max_results,
-                headless=config.kanoon_headless,
+            # T2-A: run 2-3 parallel queries instead of one broad query.
+            # WHY: Kanoon BM25 is phrasing-sensitive. Multi-angle search covers
+            # matter-type, jurisdiction, and statute dimensions simultaneously,
+            # returning a richer result set in the same wall-clock time.
+            parallel_queries = _build_parallel_queries(state)
+            console.print(
+                f"[bold blue]→ Research:[/bold blue] "
+                f"[{len(parallel_queries)} queries firing in parallel]"
             )
-            # WHY: guard against search_and_fetch returning a string error message
-            # instead of a dict — calling .get() on a string raises AttributeError.
-            results = kanoon_result.get("results", []) if isinstance(kanoon_result, dict) else []
+            for i, q in enumerate(parallel_queries, 1):
+                console.print(f"  [{i}/{len(parallel_queries)}] [dim]{q[:70]}...[/dim]")
+
+            import time as _time
+
+            async def _fetch_one(q: str, idx: int) -> list[dict]:
+                t0 = _time.monotonic()
+                try:
+                    r = await search_and_fetch(
+                        query=q,
+                        max_results=config.kanoon_max_results,
+                        headless=config.kanoon_headless,
+                    )
+                    hits = r.get("results", []) if isinstance(r, dict) else []
+                    elapsed = _time.monotonic() - t0
+                    console.print(
+                        f"  [{idx}/{len(parallel_queries)}] "
+                        f"[green]✓[/green] {len(hits)} case(s) ({elapsed:.1f}s)"
+                    )
+                    return hits
+                except Exception as exc:
+                    console.print(f"  [{idx}/{len(parallel_queries)}] [yellow]✗ {exc}[/yellow]")
+                    return []
+
+            all_batches = await asyncio.gather(
+                *[_fetch_one(q, i) for i, q in enumerate(parallel_queries, 1)]
+            )
+
+            # Deduplicate by URL — preserve order, first occurrence wins.
+            seen_urls: set[str] = set()
+            results = []
+            for batch in all_batches:
+                for r in batch:
+                    url = r.get("url", "")
+                    if url and url not in seen_urls:
+                        seen_urls.add(url)
+                        results.append(r)
+                    elif not url:
+                        results.append(r)
 
         # Phase 8: if Kanoon returned nothing and eCourts is not configured, surface nudge
         # via a special state key — telegram.py reads this and shows the configure button.
@@ -125,10 +219,15 @@ async def run(state: LexState) -> dict:
             and config.ecourts_backend == "stub"
         )
 
-        # Limitation check — uses the registered tool so it's discoverable by the LLM too
+        # Limitation check — run concurrently with any remaining work
+        # WHY asyncio.to_thread: check_limitation is CPU-bound/sync; wrapping it lets
+        # the event loop remain unblocked so other coroutines can run in parallel.
         check_lim = ToolRegistry.get("check_limitation")
         coa_date = state.get("cause_of_action_date") or ""
-        limitation_result = check_lim(
+
+        console.print("[dim]  ↳ Limitation analysis...[/dim]")
+        limitation_result = await asyncio.to_thread(
+            check_lim,
             matter_type=state.get("matter_type") or "",
             cause_of_action_date=coa_date if isinstance(coa_date, str) else "",
         )
@@ -148,11 +247,10 @@ async def run(state: LexState) -> dict:
         extra_findings: list[dict] = []
 
         if config.raptor_enabled and results:
-            from lexagent.nodes._llm import get_llm
             from lexagent.tools.raptor_summarizer import RaptorSummarizer, raptor_tree_to_findings
 
             summarizer = RaptorSummarizer(
-                llm=get_llm(config),
+                cfg=config,
                 max_layers=config.raptor_max_layers,
                 max_cluster_size=config.raptor_max_cluster_size,
             )

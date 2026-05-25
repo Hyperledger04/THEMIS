@@ -136,9 +136,8 @@ async def run(state: LexState) -> dict:
             # ----------------------------------------------------------------
             reranker = None
             if cfg.reranker_enabled:
-                from lexagent.nodes._llm import get_llm
                 from lexagent.tools.reranker import LLMReranker
-                reranker = LLMReranker(llm=get_llm(cfg), top_k=1)
+                reranker = LLMReranker(cfg=cfg, top_k=1)
                 console.print("[cyan]→ Cite:[/cyan] LLM re-ranker enabled")
 
             grounded: list[dict] = []

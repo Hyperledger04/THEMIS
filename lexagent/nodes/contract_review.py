@@ -13,7 +13,6 @@ import asyncio
 from pathlib import Path
 
 import litellm
-from langchain_core.messages import AIMessage
 from rich.console import Console
 
 from lexagent.config import LexConfig
@@ -191,7 +190,7 @@ async def run(state: LexState) -> dict:
                 f"Overall risk: {risk_analysis['overall_risk']}. "
                 f"{risk_analysis['high_count']} high-risk findings require immediate attention."
             ),
-            "messages": [AIMessage(content=full_report)],
+            "messages": list(state.get("messages", [])) + [{"role": "assistant", "content": full_report}],
         }
 
     except Exception as e:

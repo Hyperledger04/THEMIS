@@ -37,18 +37,18 @@ class RaptorSummarizer:
     Build a hierarchical summary tree from a list of Chunks.
 
     Usage:
-        summarizer = RaptorSummarizer(llm=get_llm(cfg), max_layers=2)
+        summarizer = RaptorSummarizer(cfg=cfg, max_layers=2)
         tree = await summarizer.build_tree(chunks)
         # tree is a list of RaptorNode (layer 0 = leaves, layer 1+ = summaries)
     """
 
     def __init__(
         self,
-        llm,
+        cfg,
         max_layers: int = 2,
         max_cluster_size: int = 5,
     ) -> None:
-        self._llm = llm
+        self._cfg = cfg
         self._max_layers = max_layers
         self._max_cluster_size = max_cluster_size
 
@@ -170,8 +170,9 @@ class RaptorSummarizer:
         )
 
         try:
-            response = await self._llm.ainvoke(prompt)
-            summary_text = response.content if hasattr(response, "content") else str(response)
+            from lexagent.nodes._llm import call_llm
+            result = await call_llm([{"role": "user", "content": prompt}], self._cfg)
+            summary_text = result["content"]
         except Exception:
             # WHY: If the LLM call fails, fall back to the first node's text truncated.
             # Better than crashing the research pipeline mid-run.

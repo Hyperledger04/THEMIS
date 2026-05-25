@@ -1,7 +1,8 @@
 """Tests for lexagent/tools/reranker.py"""
 import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, patch
 
+from lexagent.config import LexConfig
 from lexagent.tools.chunker import Chunk
 from lexagent.tools.retriever import RetrievalResult
 from lexagent.tools.reranker import LLMReranker, _parse_scores
@@ -12,12 +13,11 @@ def _make_result(text: str, score: float = 0.5) -> RetrievalResult:
     return RetrievalResult(child=chunk, parent=chunk, score=score, bm25_score=score, vector_score=score)
 
 
-def _make_llm(response_text: str) -> MagicMock:
-    llm = MagicMock()
-    mock_response = MagicMock()
-    mock_response.content = response_text
-    llm.ainvoke = AsyncMock(return_value=mock_response)
-    return llm
+def _make_reranker(response_text: str, top_k: int = 5) -> tuple:
+    """Return (reranker, patcher) — caller must start/stop the patcher."""
+    cfg = LexConfig()
+    reranker = LLMReranker(cfg=cfg, top_k=top_k)
+    return reranker, response_text
 
 
 # -----------------------------------------------------------------------
@@ -53,39 +53,45 @@ def test_parse_scores_wrong_count_fallback():
 
 @pytest.mark.asyncio
 async def test_rerank_empty_returns_empty():
-    reranker = LLMReranker(llm=_make_llm("[5]"), top_k=5)
+    cfg = LexConfig()
+    reranker = LLMReranker(cfg=cfg, top_k=5)
     assert await reranker.rerank("query", []) == []
 
 
 @pytest.mark.asyncio
 async def test_rerank_sorts_by_score():
-    # LLM returns scores [2, 9, 4] → result[1] should come first
     results = [
         _make_result("Low relevance passage", score=0.9),
         _make_result("High relevance passage about injunction", score=0.3),
         _make_result("Medium relevance passage", score=0.5),
     ]
-    reranker = LLMReranker(llm=_make_llm("[2, 9, 4]"), top_k=3)
-    reranked = await reranker.rerank("injunction property dispute", results)
+    cfg = LexConfig()
+    reranker = LLMReranker(cfg=cfg, top_k=3)
+    with patch("lexagent.nodes._llm.call_llm", new_callable=AsyncMock) as mock_llm:
+        mock_llm.return_value = {"content": "[2, 9, 4]", "tool_calls": None}
+        reranked = await reranker.rerank("injunction property dispute", results)
     assert reranked[0].child.chunk_text == "High relevance passage about injunction"
 
 
 @pytest.mark.asyncio
 async def test_rerank_respects_top_k():
     results = [_make_result(f"Passage {i}") for i in range(6)]
-    reranker = LLMReranker(llm=_make_llm("[1, 2, 3, 4, 5, 6]"), top_k=3)
-    reranked = await reranker.rerank("query", results)
+    cfg = LexConfig()
+    reranker = LLMReranker(cfg=cfg, top_k=3)
+    with patch("lexagent.nodes._llm.call_llm", new_callable=AsyncMock) as mock_llm:
+        mock_llm.return_value = {"content": "[1, 2, 3, 4, 5, 6]", "tool_calls": None}
+        reranked = await reranker.rerank("query", results)
     assert len(reranked) <= 3
 
 
 @pytest.mark.asyncio
 async def test_rerank_llm_failure_returns_original_order():
     results = [_make_result(f"Passage {i}", score=float(i)) for i in range(3)]
-    llm = MagicMock()
-    llm.ainvoke = AsyncMock(side_effect=RuntimeError("LLM down"))
-    reranker = LLMReranker(llm=llm, top_k=3)
-    reranked = await reranker.rerank("query", results)
-    # Falls back to original order (top_k from original)
+    cfg = LexConfig()
+    reranker = LLMReranker(cfg=cfg, top_k=3)
+    with patch("lexagent.nodes._llm.call_llm", new_callable=AsyncMock) as mock_llm:
+        mock_llm.side_effect = RuntimeError("LLM down")
+        reranked = await reranker.rerank("query", results)
     assert len(reranked) <= 3
     assert reranked[0].child.chunk_text == "Passage 0"
 

@@ -1,11 +1,14 @@
 # Contextual progress messages shown in Telegram during graph execution.
 # {placeholders} are filled from state fields at runtime.
 # A random message is selected from each node's pool each time.
+# CLI uses lexagent/ui/spinner.py for animated cycling phrases.
 
 intake:
   - "📋 Analysing your brief…"
   - "📋 Reading your matter brief…"
   - "📋 Identifying matter type and parties…"
+  - "📋 Lexatating…"
+  - "📋 Raising objections internally…"
 
 research:
   - "🔍 Searching Indian Kanoon for {matter_type} precedents in {jurisdiction}…"
@@ -13,22 +16,34 @@ research:
   - "🔍 Researching {matter_type} — checking relevant case law…"
   - "📚 Reading judgments and extracting relevant citations…"
   - "⚖️ Running limitation analysis and statute check…"
+  - "🔍 Negotiating with Indian Kanoon…"
+  - "🔍 Reading 47 judgments so you don't have to…"
+  - "🔍 Arguing with databases…"
+  - "🔍 Debating precedent…"
 
 draft:
   - "✍️ Drafting your {matter_type} for {jurisdiction}…"
   - "✍️ Building your {matter_type} — this takes about 30 seconds…"
   - "⚖️ Writing the {matter_type} with verified citations…"
   - "📝 Composing the draft with your instructions and case law…"
+  - "✍️ Drafting with extreme prejudice…"
+  - "✍️ Objecting to bad sentence structure…"
+  - "✍️ Lawyering…"
+  - "✍️ Hereinafter referred to as 'almost done'…"
 
 cite:
   - "📌 Verifying citations against Indian Kanoon corpus…"
   - "📌 Cross-referencing citations — checking every case number…"
   - "🔎 Grounding each citation to a source chunk…"
+  - "📌 Cross-examining citations…"
+  - "📌 Holding citations in contempt…"
 
 review:
   - "✅ Final review — checking length, citations, and structure…"
   - "✅ Quality check in progress…"
   - "✅ Validating draft against {jurisdiction} filing guidelines…"
+  - "✅ Your Honour, the draft is ready…"
+  - "✅ The ayes have it…"
 
 contract_review:
   - "📄 Analysing contract clauses for risk…"

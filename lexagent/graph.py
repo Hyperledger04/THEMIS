@@ -24,6 +24,15 @@ logger = logging.getLogger(__name__)
 # Phase 9: _GRAPH is now a dict keyed by checkpointer type so we can hold both
 # the Postgres-backed graph (production) and the in-memory graph (stub/tests)
 # without rebuilding unnecessarily.
+# Matter types that never benefit from case-law research.
+# For these, intake routes directly to draft, skipping the research node entirely.
+_NO_RESEARCH_TYPES = (
+    "legal notice",
+    "demand notice",
+    "affidavit",
+    "vakalatnama",
+)
+
 _GRAPHS: dict = {}
 
 
@@ -149,8 +158,29 @@ def _make_routes(cfg: LexConfig):
             # Phase 7: contract review branch bypasses the research → draft pipeline.
             if state.get("workflow_mode") == "contract_review":
                 return "contract_review"
+            # Skip research for document types that don't need case law.
+            mt = (state.get("matter_type") or "").lower()
+            if any(t in mt for t in _NO_RESEARCH_TYPES):
+                return "draft"
             return "research"
-        return "intake"
+        # WHY: return END (not "intake") so the graph yields back to the CLI after
+        # each incomplete intake round. The CLI's while-loop re-invokes the graph
+        # with the user's answers appended — this is the human-in-the-loop pattern.
+        # Looping back to "intake" internally means the LLM runs multiple times
+        # with no new user input, producing an infinite spinner with no questions shown.
+        return END
+
+    def route_after_research(state: LexState) -> str:
+        """
+        After research runs:
+        - research_only=True → stop here (CLI renders a findings table, no draft)
+        - otherwise → draft
+        """
+        if state.get("error"):
+            return END
+        if state.get("research_only"):
+            return END
+        return "draft"
 
     def route_after_draft(state: LexState) -> str:
         """
@@ -168,7 +198,7 @@ def _make_routes(cfg: LexConfig):
             return "cite"
         return "review"
 
-    return route_after_intake, route_after_draft
+    return route_after_intake, route_after_research, route_after_draft
 
 
 # -----------------------------------------------------------------------
@@ -191,7 +221,7 @@ def build_graph() -> StateGraph:
     Postgres (production) and MemorySaver (tests/CLI).
     """
     cfg = LexConfig()
-    route_after_intake, route_after_draft = _make_routes(cfg)
+    route_after_intake, route_after_research, route_after_draft = _make_routes(cfg)
 
     # LANGGRAPH: StateGraph(LexState) tells LangGraph the shape of the state.
     # It uses this to validate that nodes return keys that exist in LexState.
@@ -221,8 +251,8 @@ def build_graph() -> StateGraph:
     # LANGGRAPH: add_conditional_edges on draft too — handles cite-or-review routing.
     graph.add_conditional_edges("draft", route_after_draft)
 
-    # research always feeds into draft — no branching needed here
-    graph.add_edge("research", "draft")
+    # research → draft normally; research_only=True → END
+    graph.add_conditional_edges("research", route_after_research)
 
     # cite feeds into review; review is the terminal node in Phase 5
     # LANGGRAPH: first time chaining cite→review — review validates grounding
