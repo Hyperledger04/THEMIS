@@ -48,6 +48,24 @@ def test_health(client):
     assert resp.json()["status"] == "ok"
 
 
+def test_document_viewer_returns_anchor_target(client):
+    with patch("lexagent.gateway.control_plane.LexConfig") as cfg_cls:
+        cfg = MagicMock()
+        cfg.api_secret_key = None
+        cfg.default_firm_id = "default"
+        cfg_cls.return_value = cfg
+
+        resp = client.get("/document-viewer/M-001/doc_001?page=4&line=27&anchor=F3")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["matter_id"] == "M-001"
+    assert data["document_id"] == "doc_001"
+    assert data["page"] == 4
+    assert data["line"] == 27
+    assert data["anchor"] == "F3"
+
+
 # ─── Auth ────────────────────────────────────────────────────────────────────
 
 def test_send_message_no_auth_required_when_key_not_set(client):

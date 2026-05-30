@@ -106,6 +106,15 @@ class MatterOut(BaseModel):
     error: Optional[str] = None
 
 
+class DocumentViewerOut(BaseModel):
+    matter_id: str
+    document_id: str
+    page: Optional[int] = None
+    line: Optional[int] = None
+    anchor: Optional[str] = None
+    highlight: Optional[str] = None
+
+
 # ---------------------------------------------------------------------------
 # REST: send a message and get the final state back (non-streaming)
 # ---------------------------------------------------------------------------
@@ -181,6 +190,36 @@ async def list_matters(auth: dict = Depends(_verify_token)) -> JSONResponse:
     checkpoint tables. Returning an empty list for now so the web UI can connect.
     """
     return JSONResponse(content={"matters": [], "firm_id": auth["firm_id"]})
+
+
+# ---------------------------------------------------------------------------
+# Web: source-citation document viewer target
+# ---------------------------------------------------------------------------
+
+@app.get("/document-viewer/{matter_id}/{document_id}", response_model=DocumentViewerOut)
+async def document_viewer(
+    matter_id: str,
+    document_id: str,
+    page: Optional[int] = None,
+    line: Optional[int] = None,
+    anchor: Optional[str] = None,
+    auth: dict = Depends(_verify_token),
+) -> DocumentViewerOut:
+    """
+    Canonical target for clickable source footnotes like [F3].
+
+    MVP: returns the requested page/line/anchor so web clients can open and
+    highlight the source. Later this endpoint should load the source_anchor row
+    from Postgres, verify tenant ownership, and serve a full document-view model.
+    """
+    return DocumentViewerOut(
+        matter_id=matter_id,
+        document_id=document_id,
+        page=page,
+        line=line,
+        anchor=anchor,
+        highlight=f"page={page} line={line} anchor={anchor}",
+    )
 
 
 # ---------------------------------------------------------------------------
