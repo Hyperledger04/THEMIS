@@ -25,11 +25,11 @@ from playwright.async_api import Page, async_playwright
 from rich.console import Console
 
 from lexagent.config import LexConfig
+from lexagent.tools.kanoon_utils import KANOON_BASE, fix_doc_url
 
 console = Console()
 config = LexConfig()
 
-KANOON_BASE = "https://indiankanoon.org"
 SEARCH_URL = f"{KANOON_BASE}/search/?formInput={{query}}&pagenum=1"
 
 # WHY: Indian Kanoon uses several CSS classes for the judgment body across
@@ -74,19 +74,9 @@ async def _get_page(playwright, headless: bool) -> tuple:
     return browser, page
 
 
-def _fix_doc_url(href: str) -> str:
-    """
-    Convert a /docfragment/{id}/ AJAX href to the full /doc/{id}/ page URL.
-
-    WHY: Indian Kanoon search results link to /docfragment/{id}/?formInput=...
-    which is an AJAX fragment endpoint — navigating to it directly gives a raw
-    HTML snippet with no .judgments div. The real judgment page is /doc/{id}/.
-    """
-    # /docfragment/12345678/?formInput=... → /doc/12345678/
-    fixed = re.sub(r"/docfragment/(\d+)/.*", r"/doc/\1/", href)
-    # Strip any remaining query string from /doc/ URLs too
-    fixed = re.sub(r"(/doc/\d+/).*", r"\1", fixed)
-    return fixed
+# WHY: _fix_doc_url is now the shared fix_doc_url from kanoon_utils so all
+# tools (Playwright, Jina Reader) normalise Kanoon URLs identically.
+_fix_doc_url = fix_doc_url
 
 
 async def _search_kanoon(page: Page, query: str, max_results: int = 5) -> list[dict]:

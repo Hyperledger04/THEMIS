@@ -104,6 +104,25 @@ def draft(
             "Run [bold cyan]lex setup[/bold cyan] for personalised drafts.\n"
         )
 
+    # Nudge if no research tools are configured — non-blocking, draft still runs
+    _has_research = any([
+        cfg.enable_kanoon,
+        cfg.tavily_enabled,
+        cfg.playwright_enabled,
+        cfg.web_search_enabled,
+        cfg.jina_enabled,
+        cfg.ecourts_backend != "stub",
+        cfg.serpapi_enabled,
+        cfg.perplexity_enabled,
+        cfg.firecrawl_enabled,
+        cfg.legislation_enabled,
+    ])
+    if not _has_research:
+        console.print(
+            "\n[yellow]⚠  No research tools configured.[/yellow] "
+            "Run [bold cyan]lex config tools[/bold cyan] to enable Indian Kanoon, Tavily, eCourts, or other sources.\n"
+        )
+
     if not brief:
         brief = Prompt.ask(
             "[bold cyan]Describe your matter[/bold cyan] [dim](or start with @agentname)[/dim]",
@@ -803,6 +822,14 @@ def config_test() -> None:
                 border_style="red",
             )
         )
+
+
+@config_app.command("tools")
+def config_tools() -> None:
+    """Configure research tools and API keys (Indian Kanoon, eCourts, Tavily, etc.)."""
+    from lexagent.memory.soul import _setup_research_tools
+    cfg = LexConfig()
+    _setup_research_tools(cfg.home_dir)
 
 
 # ---------------------------------------------------------------------------

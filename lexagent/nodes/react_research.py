@@ -237,13 +237,44 @@ async def run(state: LexState) -> dict:
         ]
         query = " ".join(p for p in parts if p).strip() or state.get("user_input", "legal matter India")[:200]
 
-        console.print(f"[bold blue]→ ReAct Research:[/bold blue] {query[:80]}")
+        # WHY: only run tools the user has explicitly enabled via `lex config tools`.
+        # _run_kanoon_search already guards on kanoon_api_key; this outer gate
+        # ensures Kanoon is not attempted at all when enable_kanoon=False.
+        active_tools = []
+        if cfg.enable_kanoon:
+            active_tools.append("kanoon")
+        if cfg.tavily_enabled and cfg.tavily_api_key:
+            active_tools.append("tavily")
 
-        # Collect findings from all sources concurrently
-        kanoon_task = asyncio.create_task(_run_kanoon_search(query, cfg))
-        tavily_task = asyncio.create_task(_run_tavily_search(query, cfg))
+        if not active_tools:
+            console.print(
+                "[yellow]→ ReAct Research:[/yellow] No research tools configured. "
+                "Run [bold cyan]lex config tools[/bold cyan] to enable Indian Kanoon or Tavily."
+            )
+            return {
+                "research_findings": [],
+                "statutes_cited": [],
+                "limitation_analysis": (
+                    "No research tools configured — run `lex config tools` to enable research sources."
+                ),
+            }
 
-        kanoon_results, tavily_results = await asyncio.gather(kanoon_task, tavily_task)
+        console.print(
+            f"[bold blue]→ ReAct Research:[/bold blue] {query[:80]} "
+            f"[dim]({', '.join(active_tools)})[/dim]"
+        )
+
+        # Collect findings from active sources concurrently
+        tasks = []
+        if "kanoon" in active_tools:
+            tasks.append(asyncio.create_task(_run_kanoon_search(query, cfg)))
+        if "tavily" in active_tools:
+            tasks.append(asyncio.create_task(_run_tavily_search(query, cfg)))
+
+        task_results = await asyncio.gather(*tasks)
+
+        kanoon_results = task_results[active_tools.index("kanoon")] if "kanoon" in active_tools else []
+        tavily_results = task_results[active_tools.index("tavily")] if "tavily" in active_tools else []
 
         raw_findings: list[dict] = kanoon_results + tavily_results
 

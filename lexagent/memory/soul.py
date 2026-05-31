@@ -438,6 +438,10 @@ def run_setup_wizard(home_dir: str = "~/.lexagent") -> dict:
     console.print(Rule(style="cyan"))
     console.print()
 
+    # Research tools setup — runs immediately after profile save
+    _setup_research_tools(home_dir)
+    console.print()
+
     # Guided demo offer
     offer = Prompt.ask(
         "  [bold]Want a quick demo draft?[/bold] [dim](shows how LexAgent would handle your first matter)[/dim]",
@@ -461,6 +465,121 @@ def run_setup_wizard(home_dir: str = "~/.lexagent") -> dict:
         )
 
     return soul_data
+
+
+# ---------------------------------------------------------------------------
+# Research tools setup wizard
+# ---------------------------------------------------------------------------
+
+_RESEARCH_TOOLS = [
+    # (display_label, env_key_flag, env_key_api, needs_key, dashboard_hint)
+    ("Indian Kanoon API",   "LEX_ENABLE_KANOON",        "KANOON_API_KEY",         True,  None),
+    ("eCourts MCP",         "LEX_ECOURTS_BACKEND=api",  "ECOURTS_API_KEY",         True,  "https://api.ecourts.gov.in/dashboard  (Register → My Applications → Create API Key)"),
+    ("legislation.gov.in",  "LEX_LEGISLATION_ENABLED",  None,                      False, None),
+    ("Playwright browser",  "LEX_PLAYWRIGHT_ENABLED",   None,                      False, None),
+    ("Tavily",              "LEX_TAVILY_ENABLED",        "TAVILY_API_KEY",          True,  None),
+    ("SerpAPI",             "LEX_SERPAPI_ENABLED",       "SERPAPI_API_KEY",         True,  None),
+    ("Perplexity",          "LEX_PERPLEXITY_ENABLED",    "PERPLEXITY_API_KEY",      True,  None),
+    ("DuckDuckGo",          "LEX_WEB_SEARCH_ENABLED",   None,                      False, None),
+    ("Jina Reader",         "LEX_JINA_ENABLED",         None,                      False, None),
+    ("Firecrawl",           "LEX_FIRECRAWL_ENABLED",    "FIRECRAWL_API_KEY",       True,  None),
+    ("CourtListener (US)",  "LEX_COURTLISTENER_ENABLED","COURTLISTENER_API_KEY",   True,  None),
+]
+
+
+def _setup_research_tools(home_dir: str = "~/.lexagent") -> None:
+    """
+    Interactive terminal wizard for configuring research tools.
+    Writes LEX_* flags and API keys to ~/.lexagent/.env.
+    Called from run_setup_wizard() and `lex config tools`.
+    """
+    import getpass
+
+    console.print(Rule("[bold cyan]Research Tools Setup[/bold cyan]", style="cyan"))
+    console.print()
+    console.print("  [bold]Available research tools[/bold] (all off by default):\n")
+    console.print("  [dim]— Indian case law —[/dim]")
+    console.print("  [bold cyan] 1[/bold cyan]  Indian Kanoon API      [dim](requires KANOON_API_KEY)[/dim]")
+    console.print("  [bold cyan] 2[/bold cyan]  eCourts MCP            [dim](requires ECOURTS_API_KEY from eCourts dashboard)[/dim]")
+    console.print("  [bold cyan] 3[/bold cyan]  legislation.gov.in     [dim](no key — official statute portal)[/dim]")
+    console.print("  [bold cyan] 4[/bold cyan]  Playwright browser     [dim](no key — scrapes Kanoon directly)[/dim]")
+    console.print()
+    console.print("  [dim]— Web search —[/dim]")
+    console.print("  [bold cyan] 5[/bold cyan]  Tavily                 [dim](requires TAVILY_API_KEY)[/dim]")
+    console.print("  [bold cyan] 6[/bold cyan]  SerpAPI                [dim](requires SERPAPI_API_KEY)[/dim]")
+    console.print("  [bold cyan] 7[/bold cyan]  Perplexity             [dim](requires PERPLEXITY_API_KEY)[/dim]")
+    console.print("  [bold cyan] 8[/bold cyan]  DuckDuckGo             [dim](no key — free web search)[/dim]")
+    console.print()
+    console.print("  [dim]— Verification —[/dim]")
+    console.print("  [bold cyan] 9[/bold cyan]  Jina Reader            [dim](no key — verifies citation URLs)[/dim]")
+    console.print("  [bold cyan]10[/bold cyan]  Firecrawl              [dim](requires FIRECRAWL_API_KEY)[/dim]")
+    console.print()
+    console.print("  [dim]— International —[/dim]")
+    console.print("  [bold cyan]11[/bold cyan]  CourtListener (US)     [dim](requires COURTLISTENER_API_KEY, scaffold only)[/dim]")
+    console.print()
+
+    raw = Prompt.ask(
+        "  Select tools to enable [dim](e.g. 1,3,5,9 — or 0 to skip)[/dim]",
+        default="0",
+        console=console,
+    ).strip()
+
+    if raw == "0":
+        console.print("  [dim]⏭  Research tools skipped — run [bold]lex config tools[/bold] to configure later.[/dim]")
+        return
+
+    # Parse selection
+    selected_indices: list[int] = []
+    for part in raw.split(","):
+        try:
+            idx = int(part.strip()) - 1
+            if 0 <= idx < len(_RESEARCH_TOOLS):
+                selected_indices.append(idx)
+        except ValueError:
+            pass
+
+    if not selected_indices:
+        console.print("  [yellow]No valid selection — skipping.[/yellow]")
+        return
+
+    env_lines: list[str] = []
+
+    for idx in selected_indices:
+        label, flag_key, api_key_name, needs_key, dashboard_hint = _RESEARCH_TOOLS[idx]
+        console.print()
+        console.print(f"  [bold green]✓[/bold green] Enabling [bold]{label}[/bold]")
+
+        # Write the boolean/backend flag
+        if flag_key == "LEX_ECOURTS_BACKEND=api":
+            env_lines.append("LEX_ECOURTS_BACKEND=api")
+        else:
+            env_lines.append(f"{flag_key}=true")
+
+        if needs_key and api_key_name:
+            if dashboard_hint:
+                console.print(f"  [bold blue]ℹ[/bold blue]  Get your API key at: [link]{dashboard_hint}[/link]")
+            api_key_val = getpass.getpass(f"    Enter {label} API key (hidden): ").strip()
+            if api_key_val:
+                env_lines.append(f"{api_key_name}={api_key_val}")
+                console.print("  [green]  Key saved (not displayed for security).[/green]")
+            else:
+                console.print(f"  [yellow]  No key entered — {label} enabled but key missing.[/yellow]")
+
+    # Write to ~/.lexagent/.env
+    if env_lines:
+        lex_env = Path(home_dir).expanduser() / ".env"
+        existing = lex_env.read_text(encoding="utf-8") if lex_env.exists() else ""
+        new_entries = [line for line in env_lines if line.split("=")[0] not in existing]
+        if new_entries:
+            with lex_env.open("a", encoding="utf-8") as f:
+                f.write(("\n" if existing and not existing.endswith("\n") else "") + "\n".join(new_entries) + "\n")
+
+    console.print()
+    console.print(
+        f"  [green]✓[/green] Research tools configured — "
+        f"{len(selected_indices)} tool(s) enabled. "
+        f"Settings saved to [cyan]{Path(home_dir).expanduser() / '.env'}[/cyan]"
+    )
 
 
 # ---------------------------------------------------------------------------

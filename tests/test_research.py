@@ -3,7 +3,11 @@
 import os
 import pytest
 
+# WHY: set both flags so existing stub-mode tests remain unaffected by the new
+# default (enable_kanoon=False). Tests that verify the "no tools" gate explicitly
+# override these via monkeypatch.
 os.environ.setdefault("LEX_KANOON_BACKEND", "stub")
+os.environ.setdefault("LEX_ENABLE_KANOON", "true")
 
 from lexagent.nodes.research import _build_search_query, _extract_statutes, run
 
@@ -99,8 +103,87 @@ async def test_run_catches_exceptions_into_error_key(monkeypatch):
         kanoon_backend = "playwright"
         kanoon_max_results = 1
         kanoon_headless = True
+        enable_kanoon = True
+        ecourts_backend = "stub"
+        tavily_enabled = False
+        tavily_api_key = None
+        playwright_enabled = False
+        web_search_enabled = False
+        serpapi_enabled = False
+        serpapi_api_key = None
+        perplexity_enabled = False
+        perplexity_api_key = None
+        firecrawl_enabled = False
+        firecrawl_api_key = None
+        jina_enabled = False
+        legislation_enabled = False
+        raptor_enabled = False
+        graphrag_enabled = False
+        qdrant_enabled = False
 
     monkeypatch.setattr("lexagent.nodes.research.search_and_fetch", bad_kanoon)
     monkeypatch.setattr("lexagent.nodes.research.LexConfig", _FakeConfig)
     result = await run(_state())
-    assert "error" in result
+    # WHY: per-tool network failures are caught gracefully — the node returns
+    # empty findings rather than a fatal error, so draft can still run.
+    assert "error" not in result
+    assert result["research_findings"] == []
+
+
+@pytest.mark.asyncio
+async def test_run_no_tools_configured_returns_nudge_not_error(monkeypatch):
+    """When no research tools are enabled, the node returns a nudge message — not an error."""
+    class _NoToolsConfig:
+        kanoon_backend = "stub"
+        enable_kanoon = False
+        ecourts_backend = "stub"
+        tavily_enabled = False
+        tavily_api_key = None
+        playwright_enabled = False
+        web_search_enabled = False
+        serpapi_enabled = False
+        serpapi_api_key = None
+        perplexity_enabled = False
+        perplexity_api_key = None
+        firecrawl_enabled = False
+        firecrawl_api_key = None
+        jina_enabled = False
+        legislation_enabled = False
+        raptor_enabled = False
+        graphrag_enabled = False
+        qdrant_enabled = False
+
+    monkeypatch.setattr("lexagent.nodes.research.LexConfig", _NoToolsConfig)
+    result = await run(_state())
+    assert "error" not in result
+    assert result["research_findings"] == []
+    assert "lex config tools" in result["limitation_analysis"]
+
+
+@pytest.mark.asyncio
+async def test_run_no_tools_approved_tools_empty_returns_nudge(monkeypatch):
+    """Telegram path: approved_tools=[] (user skipped all) → same nudge, no error."""
+    class _NoToolsConfig:
+        kanoon_backend = "stub"
+        enable_kanoon = False
+        ecourts_backend = "stub"
+        tavily_enabled = False
+        tavily_api_key = None
+        playwright_enabled = False
+        web_search_enabled = False
+        serpapi_enabled = False
+        serpapi_api_key = None
+        perplexity_enabled = False
+        perplexity_api_key = None
+        firecrawl_enabled = False
+        firecrawl_api_key = None
+        jina_enabled = False
+        legislation_enabled = False
+        raptor_enabled = False
+        graphrag_enabled = False
+        qdrant_enabled = False
+
+    monkeypatch.setattr("lexagent.nodes.research.LexConfig", _NoToolsConfig)
+    result = await run(_state(approved_tools=[]))
+    assert "error" not in result
+    assert result["research_findings"] == []

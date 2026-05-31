@@ -13,6 +13,12 @@ from lexagent.state import LexState
 # WHY: Importing limitation here ensures @ToolRegistry.register fires at startup.
 # Tools self-register on first import — no explicit registration call needed.
 import lexagent.tools.limitation  # noqa: F401
+import lexagent.tools.duckduckgo_search  # noqa: F401
+import lexagent.tools.serpapi_search  # noqa: F401
+import lexagent.tools.perplexity_search  # noqa: F401
+import lexagent.tools.firecrawl_fetch  # noqa: F401
+import lexagent.tools.legislation_scraper  # noqa: F401
+import lexagent.tools.courtlistener  # noqa: F401
 from lexagent.tools.kanoon import search_and_fetch
 from lexagent.tools.kanoon_api import search_and_fetch_api
 from lexagent.tools.registry import ToolRegistry
@@ -104,55 +110,88 @@ def _extract_statutes(results: list[dict]) -> list[str]:
     return list(statutes)[:15]  # cap to avoid bloating state
 
 
+def _tool_active(config_flag: bool, approved_tools, tool_name: str) -> bool:
+    """
+    True only if: config says the tool is enabled AND either:
+    - CLI mode (approved_tools is None — no Telegram gate involved), OR
+    - Telegram mode and user explicitly selected this tool.
+    WHY: This is the single gating function so CLI and Telegram paths are consistent.
+    """
+    if not config_flag:
+        return False
+    return approved_tools is None or tool_name in (approved_tools or [])
+
+
 async def run(state: LexState) -> dict:
     config = LexConfig()
 
-    # WHY: when kanoon_backend=api, delegate to the ReAct research node which
-    # applies the citation enforcement gate and playwright fallback per-doc.
-    # The gate guarantees every finding has title/url/doc_excerpt/citation before
-    # reaching the draft node — impossible to guarantee in the legacy path below.
-    if config.kanoon_backend == "api":
+    # WHY: when kanoon_backend=api AND Kanoon is enabled, delegate to the ReAct
+    # research node which applies the citation enforcement gate and playwright
+    # fallback per-doc. Gate behind enable_kanoon so it doesn't fire by default.
+    if config.kanoon_backend == "api" and config.enable_kanoon:
         from lexagent.nodes.react_research import run as react_run
         return await react_run(state)
 
     try:
         query = _build_search_query(state)
-        console.print(f"[bold blue]→ Research:[/bold blue] {query[:80]}")
 
         # Phase 8: respect approved_tools from Telegram tool routing.
-        # None = not yet decided (Telegram hasn't asked yet); [] = user chose skip.
-        # When running from CLI, approved_tools is None and we run all tools as before.
+        # None = CLI mode (no Telegram gate). [] = user chose skip all tools.
         approved_tools = state.get("approved_tools")
-        kanoon_approved = (
-            approved_tools is None                        # CLI mode: always run
-            or "kanoon" in (approved_tools or [])        # Telegram: user selected Kanoon
+
+        # Build the active-tool map — every tool gated on both config and user approval.
+        active = {
+            "kanoon":      _tool_active(config.enable_kanoon, approved_tools, "kanoon"),
+            "ecourts":     _tool_active(config.ecourts_backend != "stub", approved_tools, "ecourts"),
+            "tavily":      _tool_active(config.tavily_enabled, approved_tools, "tavily"),
+            "playwright":  _tool_active(config.playwright_enabled, approved_tools, "playwright"),
+            "web_search":  _tool_active(config.web_search_enabled, approved_tools, "web_search"),
+            "serpapi":     _tool_active(config.serpapi_enabled, approved_tools, "serpapi"),
+            "perplexity":  _tool_active(config.perplexity_enabled, approved_tools, "perplexity"),
+            "firecrawl":   _tool_active(config.firecrawl_enabled, approved_tools, "firecrawl"),
+            "jina":        _tool_active(config.jina_enabled, approved_tools, "jina"),
+            "legislation": _tool_active(config.legislation_enabled, approved_tools, "legislation"),
+        }
+
+        # WHY: if no tools are active, return a nudge message rather than failing silently.
+        # The draft node still runs — the lawyer can supply facts manually.
+        if not any(active.values()):
+            console.print(
+                "[yellow]→ Research:[/yellow] No research tools configured. "
+                "Run [bold cyan]lex config tools[/bold cyan] to enable Indian Kanoon, Tavily, or eCourts."
+            )
+            return {
+                "research_findings": [],
+                "statutes_cited": [],
+                "limitation_analysis": (
+                    "No research tools configured — run `lex config tools` to enable "
+                    "Indian Kanoon, Tavily, eCourts, or other research sources."
+                ),
+            }
+
+        console.print(
+            f"[bold blue]→ Research:[/bold blue] {query[:80]} "
+            f"[dim]({sum(active.values())} tool(s) active)[/dim]"
         )
 
         results: list[dict] = []
 
-        if not kanoon_approved or (approved_tools is not None and len(approved_tools) == 0):
-            # User skipped research entirely
-            console.print("[yellow]→ Research:[/yellow] Skipped by user.")
-            results = []
-        elif config.kanoon_backend == "stub":
+        # ── Kanoon stub (for tests / offline dev) ───────────────────────────
+        if active["kanoon"] and config.kanoon_backend == "stub":
             # WHY: stub avoids real Playwright browser in tests and offline dev.
-            # The stub still exercises the full node code path — only the HTTP call is mocked.
-            results = [
-                {
-                    "title": f"[Stub] Result for: {query[:50]}",
-                    "url": "https://indiankanoon.org/doc/stub",
-                    "snippet": "Stub — set LEX_KANOON_BACKEND=playwright for live data.",
-                    "full_text": "",
-                    "citations_found": [],
-                    "status": "stub",
-                }
-            ]
-        elif config.kanoon_backend == "api":
-            # WHY: REST API is stable and fast; Playwright breaks on page-structure changes.
-            # Requires KANOON_API_KEY in .env. Falls back gracefully if key is absent.
+            results.append({
+                "title": f"[Stub] Result for: {query[:50]}",
+                "url": "https://indiankanoon.org/doc/stub",
+                "snippet": "Stub — set LEX_KANOON_BACKEND=playwright for live data.",
+                "full_text": "",
+                "citations_found": [],
+                "status": "stub",
+            })
+
+        # ── Kanoon API ───────────────────────────────────────────────────────
+        elif active["kanoon"] and config.kanoon_backend == "api":
             if not config.kanoon_api_key:
                 console.print("[yellow]→ Kanoon API:[/yellow] KANOON_API_KEY not set — skipping.")
-                kanoon_result = {"results": []}
             else:
                 kanoon_result = await search_and_fetch_api(
                     query=query,
@@ -160,20 +199,19 @@ async def run(state: LexState) -> dict:
                     max_results=config.kanoon_max_results,
                     base_url=config.kanoon_api_base_url,
                 )
-        else:
-            # T2-A: run 2-3 parallel queries instead of one broad query.
-            # WHY: Kanoon BM25 is phrasing-sensitive. Multi-angle search covers
-            # matter-type, jurisdiction, and statute dimensions simultaneously,
-            # returning a richer result set in the same wall-clock time.
+                results.extend(kanoon_result.get("results", []))
+
+        # ── Kanoon Playwright (multi-angle parallel queries) ─────────────────
+        elif active["kanoon"] or active["playwright"]:
+            import time as _time
+
             parallel_queries = _build_parallel_queries(state)
             console.print(
-                f"[bold blue]→ Research:[/bold blue] "
-                f"[{len(parallel_queries)} queries firing in parallel]"
+                f"[bold blue]→ Kanoon/Playwright:[/bold blue] "
+                f"[{len(parallel_queries)} queries in parallel]"
             )
             for i, q in enumerate(parallel_queries, 1):
-                console.print(f"  [{i}/{len(parallel_queries)}] [dim]{q[:70]}...[/dim]")
-
-            import time as _time
+                console.print(f"  [{i}/{len(parallel_queries)}] [dim]{q[:70]}[/dim]")
 
             async def _fetch_one(q: str, idx: int) -> list[dict]:
                 t0 = _time.monotonic()
@@ -197,23 +235,89 @@ async def run(state: LexState) -> dict:
             all_batches = await asyncio.gather(
                 *[_fetch_one(q, i) for i, q in enumerate(parallel_queries, 1)]
             )
-
-            # Deduplicate by URL — preserve order, first occurrence wins.
-            seen_urls: set[str] = set()
-            results = []
             for batch in all_batches:
-                for r in batch:
-                    url = r.get("url", "")
-                    if url and url not in seen_urls:
-                        seen_urls.add(url)
-                        results.append(r)
-                    elif not url:
-                        results.append(r)
+                results.extend(batch)
+
+        # ── Tavily ───────────────────────────────────────────────────────────
+        if active["tavily"] and config.tavily_api_key:
+            try:
+                from lexagent.tools.tavily_search import search as tavily_search
+                tavily_hits = await asyncio.to_thread(tavily_search, query, config.tavily_api_key)
+                results.extend(tavily_hits if isinstance(tavily_hits, list) else tavily_hits.get("results", []))
+                console.print(f"[green]✓ Tavily:[/green] {len(tavily_hits if isinstance(tavily_hits, list) else tavily_hits.get('results', []))} result(s)")
+            except Exception as exc:
+                console.print(f"[yellow]Tavily error: {exc}[/yellow]")
+        elif active["tavily"]:
+            console.print("[yellow]→ Tavily:[/yellow] TAVILY_API_KEY not set — skipping.")
+
+        # ── DuckDuckGo ───────────────────────────────────────────────────────
+        if active["web_search"]:
+            try:
+                from lexagent.tools.duckduckgo_search import search_duckduckgo
+                ddg_hits = await asyncio.to_thread(search_duckduckgo, query)
+                results.extend(ddg_hits)
+                console.print(f"[green]✓ DuckDuckGo:[/green] {len(ddg_hits)} result(s)")
+            except Exception as exc:
+                console.print(f"[yellow]DuckDuckGo error: {exc}[/yellow]")
+
+        # ── SerpAPI (stub) ────────────────────────────────────────────────────
+        if active["serpapi"] and config.serpapi_api_key:
+            console.print("[dim]→ SerpAPI: stub — not yet implemented[/dim]")
+
+        # ── Perplexity (stub) ─────────────────────────────────────────────────
+        if active["perplexity"] and config.perplexity_api_key:
+            console.print("[dim]→ Perplexity: stub — not yet implemented[/dim]")
+
+        # ── Firecrawl (stub) ──────────────────────────────────────────────────
+        if active["firecrawl"] and config.firecrawl_api_key:
+            console.print("[dim]→ Firecrawl: stub — not yet implemented[/dim]")
+
+        # ── legislation.gov.in (stub) ─────────────────────────────────────────
+        if active["legislation"]:
+            console.print("[dim]→ legislation.gov.in: stub — not yet implemented[/dim]")
+
+        # ── Deduplicate by URL — preserve order, first occurrence wins ────────
+        seen_urls: set[str] = set()
+        deduped: list[dict] = []
+        for r in results:
+            url = r.get("url", "")
+            if url and url not in seen_urls:
+                seen_urls.add(url)
+                deduped.append(r)
+            elif not url:
+                deduped.append(r)
+        results = deduped
+
+        # ── Jina Reader verification pass ─────────────────────────────────────
+        # WHY: after all tools run, Jina verifies each finding URL is live and
+        # the document actually exists. Findings that fail get flagged as unverified
+        # rather than being passed to the draft node as gospel.
+        unverified: list[str] = []
+        if active["jina"] and results:
+            from lexagent.tools.jina_reader import fetch_url_as_markdown
+            console.print(f"[dim]  ↳ Jina verification pass ({len(results)} URLs)...[/dim]")
+
+            async def _verify_one(finding: dict) -> dict:
+                url = finding.get("url", "")
+                if not url or "stub" in url:
+                    return finding
+                jina_result = await fetch_url_as_markdown(url)
+                if jina_result.get("error") or not jina_result.get("content"):
+                    finding["_jina_verified"] = False
+                else:
+                    finding["_jina_verified"] = True
+                    if not finding.get("full_text"):
+                        finding["full_text"] = jina_result["content"][:3000]
+                return finding
+
+            results = list(await asyncio.gather(*[_verify_one(r) for r in results]))
+            unverified = [r.get("url", "") for r in results if not r.get("_jina_verified", True)]
+            if unverified:
+                console.print(f"[yellow]  ↳ {len(unverified)} URL(s) failed Jina verification[/yellow]")
 
         # Phase 8: if Kanoon returned nothing and eCourts is not configured, surface nudge
-        # via a special state key — telegram.py reads this and shows the configure button.
         kanoon_empty_nudge = (
-            kanoon_approved
+            active["kanoon"]
             and config.kanoon_backend != "stub"
             and len(results) == 0
             and config.ecourts_backend == "stub"
@@ -305,6 +409,8 @@ async def run(state: LexState) -> dict:
             "limitation_analysis": limitation_result["analysis"],
             **({"raptor_tree": raptor_tree_dicts} if raptor_tree_dicts is not None else {}),
             **({"entity_graph": entity_graph_dict} if entity_graph_dict is not None else {}),
+            # Jina-verified failures flagged for the cite node to re-check
+            **({"unverified_citations": unverified} if unverified else {}),
             # Phase 8: surface nudge flag so Telegram can show the eCourts configure button
             **({"ecourts_nudge": True} if kanoon_empty_nudge else {}),
         }

@@ -129,10 +129,33 @@ class LexConfig(BaseSettings):
     # Off by default: adds one LLM call per retrieval.
     reranker_enabled: bool = Field(False, validation_alias=AliasChoices("LEX_RERANKER_ENABLED", "reranker_enabled"))
 
-    # Individual tool toggles (for future UI enable/disable switches)
-    enable_kanoon: bool = Field(True, validation_alias=AliasChoices("LEX_ENABLE_KANOON", "enable_kanoon"))
-    enable_ecourts: bool = Field(True, validation_alias=AliasChoices("LEX_ENABLE_ECOURTS", "enable_ecourts"))
+    # Individual tool toggles — all off by default until user configures via `lex setup`
+    # WHY: No tool should fire unless the user has explicitly opted in and provided keys.
+    # The old defaults (True) caused Indian Kanoon to always run from CLI even without a key.
+    enable_kanoon: bool = Field(False, validation_alias=AliasChoices("LEX_ENABLE_KANOON", "enable_kanoon"))
+    enable_ecourts: bool = Field(False, validation_alias=AliasChoices("LEX_ENABLE_ECOURTS", "enable_ecourts"))
     enable_cause_list: bool = Field(False, validation_alias=AliasChoices("LEX_ENABLE_CAUSE_LIST", "enable_cause_list"))
+
+    # eCourts API key — obtained from eCourts dashboard (https://api.ecourts.gov.in/dashboard)
+    ecourts_api_key: Optional[str] = Field(None, validation_alias=AliasChoices("ECOURTS_API_KEY", "ecourts_api_key"))
+
+    # Additional research tool toggles and keys
+    playwright_enabled: bool = Field(False, validation_alias=AliasChoices("LEX_PLAYWRIGHT_ENABLED", "playwright_enabled"))
+    web_search_enabled: bool = Field(False, validation_alias=AliasChoices("LEX_WEB_SEARCH_ENABLED", "web_search_enabled"))
+    jina_enabled: bool = Field(False, validation_alias=AliasChoices("LEX_JINA_ENABLED", "jina_enabled"))
+    legislation_enabled: bool = Field(False, validation_alias=AliasChoices("LEX_LEGISLATION_ENABLED", "legislation_enabled"))
+
+    serpapi_enabled: bool = Field(False, validation_alias=AliasChoices("LEX_SERPAPI_ENABLED", "serpapi_enabled"))
+    serpapi_api_key: Optional[str] = Field(None, validation_alias=AliasChoices("SERPAPI_API_KEY", "serpapi_api_key"))
+
+    perplexity_enabled: bool = Field(False, validation_alias=AliasChoices("LEX_PERPLEXITY_ENABLED", "perplexity_enabled"))
+    perplexity_api_key: Optional[str] = Field(None, validation_alias=AliasChoices("PERPLEXITY_API_KEY", "perplexity_api_key"))
+
+    firecrawl_enabled: bool = Field(False, validation_alias=AliasChoices("LEX_FIRECRAWL_ENABLED", "firecrawl_enabled"))
+    firecrawl_api_key: Optional[str] = Field(None, validation_alias=AliasChoices("FIRECRAWL_API_KEY", "firecrawl_api_key"))
+
+    # CourtListener (US courts) — scaffold only; implementation comes in a later phase
+    courtlistener_enabled: bool = Field(False, validation_alias=AliasChoices("LEX_COURTLISTENER_ENABLED", "courtlistener_enabled"))
 
     # ----------------------------------------------------------------
     # Messaging Gateways (Phase 7)
@@ -244,7 +267,10 @@ class LexConfig(BaseSettings):
     twilio_phone_number: Optional[str] = Field(None, validation_alias=AliasChoices("TWILIO_PHONE_NUMBER", "twilio_phone_number"))
 
     model_config = {
-        "env_file": ".env",
+        # WHY: Two env files — project .env (higher priority) overrides ~/.lexagent/.env
+        # (written by `lex setup`). This lets the wizard persist keys across repo cleans
+        # without touching the project .env, while still allowing per-project overrides.
+        "env_file": (".env", str(__import__("pathlib").Path("~/.lexagent/.env").expanduser())),
         "env_file_encoding": "utf-8",
         "extra": "ignore",
     }

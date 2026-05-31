@@ -6,6 +6,31 @@ Run with: pytest tests/test_kanoon.py -v
 
 import pytest
 from lexagent.tools.kanoon import search_and_fetch
+from lexagent.tools.kanoon_utils import fix_doc_url
+
+
+# ---------------------------------------------------------------------------
+# URL normalisation — no browser or network required
+# ---------------------------------------------------------------------------
+
+def test_fix_doc_url_converts_fragment_to_full():
+    result = fix_doc_url("/docfragment/12345678/?formInput=foo")
+    assert result == "https://indiankanoon.org/doc/12345678/"
+
+
+def test_fix_doc_url_strips_query_from_doc_url():
+    result = fix_doc_url("/doc/12345678/?something=extra")
+    assert result == "https://indiankanoon.org/doc/12345678/"
+
+
+def test_fix_doc_url_already_clean():
+    result = fix_doc_url("https://indiankanoon.org/doc/12345678/")
+    assert result == "https://indiankanoon.org/doc/12345678/"
+
+
+def test_fix_doc_url_adds_base_for_relative_doc():
+    result = fix_doc_url("/doc/99999/")
+    assert result == "https://indiankanoon.org/doc/99999/"
 
 
 @pytest.mark.asyncio
