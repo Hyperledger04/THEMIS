@@ -24,6 +24,23 @@ from lexagent.graph import get_graph
 from lexagent.state import LexState
 from lexagent.ui.spinner import LexAnimator
 
+
+def _compress_paste_display(console: Console, text: str) -> None:
+    """
+    Replace echoed multi-line paste with a compact summary line.
+    Triggered when text has >1 line or >120 chars — threshold that catches pastes
+    but not normal typed answers.
+    WHY: Rich can't suppress terminal echo during Prompt.ask(), but we can
+    overwrite the echoed lines immediately after the call returns by moving
+    the cursor up and clearing to end of screen.
+    """
+    line_count = text.count("\n") + 1
+    char_count = len(text)
+    if line_count > 1 or char_count > 120:
+        # ANSI: move cursor up line_count lines, then clear from cursor to end of screen
+        console.print(f"\x1b[{line_count}A\x1b[J", end="")
+        console.print(f"[dim][pasted {line_count} line{'s' if line_count > 1 else ''} · {char_count} chars][/dim]")
+
 def _default_to_chat(ctx: typer.Context) -> None:
     """If 'lex' is invoked with no subcommand, start the chat interface."""
     if ctx.invoked_subcommand is None:
@@ -128,6 +145,7 @@ def draft(
             "[bold cyan]Describe your matter[/bold cyan] [dim](or start with @agentname)[/dim]",
             console=console,
         )
+        _compress_paste_display(console, brief)
 
     if not brief.strip():
         console.print("[red]No matter brief provided. Exiting.[/red]")
@@ -298,6 +316,12 @@ def _print_node_done(status, anim: LexAnimator, node_name: str, node_output: dic
         extra = f"  ·  .docx → {docx}" if docx else ""
         console.print(f"[green]✓[/green] [bold]Review[/bold]{extra}")
 
+    elif node_name == "retrieve":
+        chunks = node_output.get("retrieval_chunks") or []
+        console.print(f"[green]✓[/green] [bold]Retrieved[/bold]  {len(chunks)} context chunk(s)")
+        anim.set_phase("draft")
+        status.update(_NODE_NEXT_LABEL["research"])
+
     elif node_name == "contract_review":
         console.print("[green]✓[/green] [bold]Contract Review[/bold]  risk analysis complete")
 
@@ -313,6 +337,8 @@ async def _run_draft(
     output_path: Optional[str] = None,
     agent_config: Optional[dict] = None,
 ) -> None:
+    from lexagent.nodes.draft import register_draft_stream, unregister_draft_stream
+
     graph = get_graph()
 
     if prior_state:
@@ -333,110 +359,158 @@ async def _run_draft(
     intake_round = 0
     _GRAPH_TIMEOUT = 180
 
-    while True:
-        intake_round += 1
-        if intake_round > max_intake_rounds:
-            console.print("[red]Too many intake rounds. Please start over with more detail.[/red]")
-            break
+    # WHY: Register once before the loop — the draft node pushes tokens here.
+    # The queue persists across intake rounds; only the draft node populates it,
+    # so it stays empty until intake is complete and drafting begins.
+    draft_q = register_draft_stream(matter_id)
 
-        final_state = state
+    try:
+        while True:
+            intake_round += 1
+            if intake_round > max_intake_rounds:
+                console.print("[red]Too many intake rounds. Please start over with more detail.[/red]")
+                break
 
-        # WHY: LexAnimator runs as a background asyncio task that cycles funny phrases
-        # while each node executes. It is stopped and restarted between graph passes
-        # so the phase always matches the current work.
-        with console.status("[bold cyan]⚖  analyzing your brief...[/bold cyan]", spinner="dots") as status:
-            anim = LexAnimator(status, phase="starting")
-            anim.start()
-            try:
-                async with asyncio.timeout(_GRAPH_TIMEOUT):
-                    async for chunk in graph.astream(
-                        state,
-                        config={"configurable": {"thread_id": state["matter_id"]}},
-                    ):
-                        for node_name, node_output in chunk.items():
-                            if isinstance(node_output, dict):
-                                final_state = {**final_state, **node_output}
-                                _print_node_done(status, anim, node_name, node_output)
+            final_state = state
+            stream_task: Optional[asyncio.Task] = None
 
-            except asyncio.TimeoutError:
-                anim.stop()
-                console.print(
-                    f"\n[bold red]⏱ Timed out after {_GRAPH_TIMEOUT}s.[/bold red]\n"
-                    "Common causes:\n"
-                    "  • Wrong model name in LEX_MODEL — check your .env\n"
-                    "  • Expired or invalid API key\n"
-                    "  • Network connectivity issue\n"
-                    f"\n[dim]Current model: {cfg.model_provider}/{cfg.default_model}[/dim]\n"
-                    "[dim]Run [bold]lex config[/bold] to inspect settings.[/dim]"
-                )
-                return
+            # WHY: LexAnimator runs as a background asyncio task that cycles funny phrases
+            # while each node executes. It is stopped and restarted between graph passes
+            # so the phase always matches the current work.
+            with console.status("[bold cyan]⚖  analyzing your brief...[/bold cyan]", spinner="dots") as status:
+                anim = LexAnimator(status, phase="starting")
+                anim.start()
 
-            except Exception as exc:
-                anim.stop()
-                console.print(f"\n[bold red]Graph error:[/bold red] {exc}")
-                return
+                # WHY: _consume_tokens runs as a concurrent asyncio task alongside
+                # graph.astream(). While the LLM streams tokens into draft_q, this task
+                # reads them and prints immediately — giving live character-by-character output.
+                # On the first token it stops the spinner (status.stop is idempotent) so
+                # streaming text appears cleanly without the spinner line interfering.
+                async def _consume_tokens(q: asyncio.Queue, s=status, a=anim) -> None:
+                    seen_first = False
+                    while True:
+                        token = await q.get()
+                        if token is None:
+                            break
+                        if not seen_first:
+                            a.stop()
+                            s.stop()
+                            console.print()
+                            seen_first = True
+                        console.print(token, end="", highlight=False)
+                    if seen_first:
+                        console.print()  # trailing newline after last token
 
-            finally:
-                anim.stop()
+                stream_task = asyncio.create_task(_consume_tokens(draft_q))
 
-        state = final_state
+                try:
+                    async with asyncio.timeout(_GRAPH_TIMEOUT):
+                        async for chunk in graph.astream(
+                            state,
+                            config={"configurable": {"thread_id": state["matter_id"]}},
+                        ):
+                            for node_name, node_output in chunk.items():
+                                if isinstance(node_output, dict):
+                                    final_state = {**final_state, **node_output}
+                                    _print_node_done(status, anim, node_name, node_output)
 
-        if state.get("error"):
-            console.print(f"\n[bold red]Error:[/bold red] {state['error']}")
-            break
+                except asyncio.TimeoutError:
+                    anim.stop()
+                    console.print(
+                        f"\n[bold red]⏱ Timed out after {_GRAPH_TIMEOUT}s.[/bold red]\n"
+                        "Common causes:\n"
+                        "  • Wrong model name in LEX_MODEL — check your .env\n"
+                        "  • Expired or invalid API key\n"
+                        "  • Network connectivity issue\n"
+                        f"\n[dim]Current model: {cfg.model_provider}/{cfg.default_model}[/dim]\n"
+                        "[dim]Run [bold]lex config[/bold] to inspect settings.[/dim]"
+                    )
+                    if stream_task and not stream_task.done():
+                        stream_task.cancel()
+                    return
 
-        if not state.get("intake_complete"):
-            questions = state.get("clarifying_questions") or []
-            if questions:
-                # Autonomous mode: skip questions when brief contains the 4 core fields.
-                # WHY: LEX_AUTONOMOUS_MODE is for well-specified briefs — the lawyer has
-                # already included everything; extra prompts add friction, not value.
-                _core = ("matter_type", "parties", "jurisdiction", "purpose")
-                if cfg.autonomous_mode and all(state.get(f) for f in _core):
+                except Exception as exc:
+                    anim.stop()
+                    console.print(f"\n[bold red]Graph error:[/bold red] {exc}")
+                    if stream_task and not stream_task.done():
+                        stream_task.cancel()
+                    return
+
+                finally:
+                    anim.stop()
+
+            # Settle the stream task: await it if the draft node ran (sent sentinel),
+            # or cancel it if this was an intake-only round (no sentinel was sent).
+            if stream_task:
+                if not stream_task.done():
+                    stream_task.cancel()
+                try:
+                    await stream_task
+                except asyncio.CancelledError:
+                    pass
+
+            state = final_state
+
+            if state.get("error"):
+                console.print(f"\n[bold red]Error:[/bold red] {state['error']}")
+                break
+
+            if not state.get("intake_complete"):
+                questions = state.get("clarifying_questions") or []
+                if questions:
+                    # Autonomous mode: skip questions when brief contains the 4 core fields.
+                    # WHY: LEX_AUTONOMOUS_MODE is for well-specified briefs — the lawyer has
+                    # already included everything; extra prompts add friction, not value.
+                    _core = ("matter_type", "parties", "jurisdiction", "purpose")
+                    if cfg.autonomous_mode and all(state.get(f) for f in _core):
+                        console.print(Panel(
+                            "[dim]Autonomous mode — proceeding without clarifying questions.[/dim]\n"
+                            + "\n".join(f"  [dim]{i+1}. {q}[/dim]" for i, q in enumerate(questions)),
+                            title="[bold yellow]Auto-proceeding (LEX_AUTONOMOUS_MODE=true)[/bold yellow]",
+                            border_style="yellow",
+                        ))
+                        state = {**state, "intake_complete": True, "clarifying_questions": [], "pending_questions": []}
+                        continue
+
+                    console.print()
                     console.print(Panel(
-                        "[dim]Autonomous mode — proceeding without clarifying questions.[/dim]\n"
-                        + "\n".join(f"  [dim]{i+1}. {q}[/dim]" for i, q in enumerate(questions)),
-                        title="[bold yellow]Auto-proceeding (LEX_AUTONOMOUS_MODE=true)[/bold yellow]",
+                        "\n".join(f"[bold cyan]{i+1}.[/bold cyan] {q}" for i, q in enumerate(questions)),
+                        title="[bold yellow]LexAgent needs a few more details[/bold yellow]",
                         border_style="yellow",
                     ))
-                    state = {**state, "intake_complete": True, "clarifying_questions": [], "pending_questions": []}
+                    console.print()
+
+                    answers = Prompt.ask(
+                        "[bold]Your answers[/bold] (answer all questions above, separated by commas or in full sentences)",
+                        console=console,
+                    )
+                    _compress_paste_display(console, answers)
+
+                    state = {
+                        **state,
+                        "user_input": f"{state['user_input']}\n\nAnswers to your questions: {answers}",
+                        "messages": list(state.get("messages", [])) + [{"role": "user", "content": answers}],
+                    }
                     continue
 
-                console.print()
-                console.print(Panel(
-                    "\n".join(f"[bold cyan]{i+1}.[/bold cyan] {q}" for i, q in enumerate(questions)),
-                    title="[bold yellow]LexAgent needs a few more details[/bold yellow]",
-                    border_style="yellow",
-                ))
-                console.print()
+            if state.get("draft_output"):
+                _render_draft(state)
 
-                answers = Prompt.ask(
-                    "[bold]Your answers[/bold] (answer all questions above, separated by commas or in full sentences)",
-                    console=console,
-                )
+                if cfg.auto_save_matter:
+                    _save_session_and_memory(state, cfg)
 
-                state = {
-                    **state,
-                    "user_input": f"{state['user_input']}\n\nAnswers to your questions: {answers}",
-                    "messages": list(state.get("messages", [])) + [{"role": "user", "content": answers}],
-                }
-                continue
+                # WHY: wisdom extraction is fire-and-forget — runs in background so
+                # it never adds latency to draft delivery. Errors are suppressed inside.
+                from lexagent.memory.wisdom import extract_and_save_wisdom
+                asyncio.ensure_future(extract_and_save_wisdom(state, cfg))
 
-        if state.get("draft_output"):
-            _render_draft(state)
+                break
 
-            if cfg.auto_save_matter:
-                _save_session_and_memory(state, cfg)
-
-            # WHY: wisdom extraction is fire-and-forget — runs in background so
-            # it never adds latency to draft delivery. Errors are suppressed inside.
-            from lexagent.memory.wisdom import extract_and_save_wisdom
-            asyncio.ensure_future(extract_and_save_wisdom(state, cfg))
-
+            console.print("[yellow]No draft was produced. Try again with more detail.[/yellow]")
             break
 
-        console.print("[yellow]No draft was produced. Try again with more detail.[/yellow]")
-        break
+    finally:
+        unregister_draft_stream(matter_id)
 
 
 def _blank_state(
@@ -772,6 +846,7 @@ def config_show() -> None:
     table.add_column()
     table.add_row("Provider", f"[bold]{profile.display_name if profile else cfg.model_provider}[/bold]")
     table.add_row("Model", f"[bold cyan]{model_str}[/bold cyan]")
+    table.add_row("Chat model (intake)", cfg.chat_model or "[dim]same as draft model[/dim]")
     if cfg.model_base_url:
         table.add_row("Base URL", cfg.model_base_url)
     table.add_row("Config YAML", str(Path(cfg.config_yaml).expanduser()))

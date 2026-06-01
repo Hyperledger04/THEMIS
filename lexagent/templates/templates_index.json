@@ -1,0 +1,16 @@
+{
+  "legal_notice": "legal_notice_general.md",
+  "demand_notice": "legal_notice_general.md",
+  "legal notice": "legal_notice_general.md",
+  "demand notice": "legal_notice_general.md",
+  "s138_notice": "legal_notice_s138.md",
+  "cheque dishonour": "legal_notice_s138.md",
+  "cheque bounce": "legal_notice_s138.md",
+  "negotiable instruments": "legal_notice_s138.md",
+  "bail_application": "bail_application.md",
+  "bail application": "bail_application.md",
+  "anticipatory bail": "bail_application.md",
+  "injunction": "injunction_application.md",
+  "interim injunction": "injunction_application.md",
+  "temporary injunction": "injunction_application.md"
+}

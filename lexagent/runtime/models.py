@@ -108,6 +108,19 @@ class AgentApproval(BaseModel):
     created_at: str = Field(default_factory=_now_iso)
 
 
+class AgentNotification(BaseModel):
+    notification_id: str = Field(default_factory=lambda: runtime_id("notif"))
+    matter_id: Optional[str] = None
+    run_id: Optional[str] = None
+    channel: Literal["telegram", "email", "webhook", "console"] = "console"
+    recipient: str
+    subject: Optional[str] = None
+    body: str
+    status: Literal["queued", "sent", "failed"] = "queued"
+    created_at: str = Field(default_factory=_now_iso)
+    sent_at: Optional[str] = None
+
+
 class RuntimeEvent(BaseModel):
     event_id: str = Field(default_factory=lambda: runtime_id("event"))
     matter_id: Optional[str] = None

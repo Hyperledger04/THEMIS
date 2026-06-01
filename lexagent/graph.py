@@ -12,7 +12,7 @@ import logging
 from langgraph.graph import END, StateGraph
 
 from lexagent.config import LexConfig
-from lexagent.nodes import cite, draft, intake, research, review
+from lexagent.nodes import cite, draft, intake, react_research, retrieve, review
 from lexagent.state import LexState
 
 logger = logging.getLogger(__name__)
@@ -158,10 +158,11 @@ def _make_routes(cfg: LexConfig):
             # Phase 7: contract review branch bypasses the research → draft pipeline.
             if state.get("workflow_mode") == "contract_review":
                 return "contract_review"
-            # Skip research for document types that don't need case law.
+            # Skip research for document types that don't need case law,
+            # but still run retrieve so they get template grounding.
             mt = (state.get("matter_type") or "").lower()
             if any(t in mt for t in _NO_RESEARCH_TYPES):
-                return "draft"
+                return "retrieve"
             return "research"
         # WHY: return END (not "intake") so the graph yields back to the CLI after
         # each incomplete intake round. The CLI's while-loop re-invokes the graph
@@ -174,13 +175,13 @@ def _make_routes(cfg: LexConfig):
         """
         After research runs:
         - research_only=True → stop here (CLI renders a findings table, no draft)
-        - otherwise → draft
+        - otherwise → retrieve (template grounding before draft)
         """
         if state.get("error"):
             return END
         if state.get("research_only"):
             return END
-        return "draft"
+        return "retrieve"
 
     def route_after_draft(state: LexState) -> str:
         """
@@ -233,7 +234,8 @@ def build_graph() -> StateGraph:
     # LANGGRAPH: add_node(name, function) registers a function as a named node.
     # The name is what routing functions return to navigate to this node.
     graph.add_node("intake", intake.run)
-    graph.add_node("research", research.run)
+    graph.add_node("research", react_research.run)
+    graph.add_node("retrieve", retrieve.run)
     graph.add_node("draft", draft.run)
     graph.add_node("cite", cite.run)
     graph.add_node("review", review.run)
@@ -253,6 +255,9 @@ def build_graph() -> StateGraph:
 
     # research → draft normally; research_only=True → END
     graph.add_conditional_edges("research", route_after_research)
+
+    # retrieve always flows to draft — it's a pure context-enrichment step
+    graph.add_edge("retrieve", "draft")
 
     # cite feeds into review; review is the terminal node in Phase 5
     # LANGGRAPH: first time chaining cite→review — review validates grounding

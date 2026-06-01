@@ -317,7 +317,16 @@ class Authority(BaseModel):
     court: str | None = None
     url: str | None = None
     proposition: str
+    # Jurisdictional fields — required to prevent conflation (see §11A Failure Mode 2)
+    jurisdiction: str  # "india", "uk", "singapore", etc.
+    country: str
+    court_tier: Literal["binding_sc", "binding_hc", "persuasive_domestic", "persuasive_foreign", "academic"]
+    corpus_namespace: str  # e.g. "corpus:india_sc"
     treatment: Literal["binding", "persuasive", "distinguished", "overruled", "unknown"]
+    # Citation drift fields — required for ratio verification (see §11A Failure Mode 1)
+    verified_excerpt: str | None = None  # exact quote from source text
+    paragraph_number: str | None = None
+    verification_status: Literal["verified", "partial", "contradicted", "unverified"] = "unverified"
     verified: bool = False
 
 class Draft(BaseModel):
@@ -556,7 +565,19 @@ Scale implementation:
 
 ## 9. Legal Knowledge Architecture
 
-Current RAG is insufficient because law is relational and precedential.
+Current RAG is insufficient because law is relational, precedential, and jurisdictionally stratified. Flat vector search across a mixed corpus produces jurisdictional conflation — a practitioner-identified failure mode (see §11A).
+
+**Corpus partitioning rule:** All sources must be tagged at indexing time with `jurisdiction`, `court_tier`, and `country`. Retrieval must query within partition with explicit tier weights, not flat cosine search across the full corpus. Do not mix SC opinions, foreign persuasive, and firm commentary in a single collection without partitioning metadata.
+
+Corpus namespaces:
+- `corpus:india_sc` — Supreme Court of India
+- `corpus:india_hc:{state}` — High Courts, per state
+- `corpus:india_subordinate` — District / Tribunal level
+- `corpus:privy_council` — Privy Council (pre-Independence persuasive)
+- `corpus:foreign_persuasive` — UK, Singapore, Australia, etc.
+- `corpus:statutes` — Indian statutes and rules
+- `corpus:regulations` — Notifications, circulars, SROs
+- `corpus:firm_docs` — Uploaded matter documents, templates, precedents
 
 Target:
 
@@ -632,12 +653,99 @@ Sources:
 Citation verification pipeline:
 1. Parse citation and authority title.
 2. Fetch source text from primary/allowed source.
-3. Locate quoted/proposition text.
-4. Verify paragraph/page.
-5. Check court hierarchy and binding value.
-6. Check treatment: overruled, distinguished, followed, pending appeal.
-7. Produce `CitationVerification` object.
-8. Block final output or mark as human-review required if verification fails.
+3. Extract the ratio decidendi paragraph(s) — not just case existence.
+4. Compare the drafted proposition against the extracted excerpt (citation drift check).
+5. Verify paragraph/page reference.
+6. Check court hierarchy, jurisdiction, and binding value (jurisdictional conflation check).
+7. Check treatment: overruled, distinguished, followed, pending appeal.
+8. Produce `CitationVerification` object with status `verified` / `partial` / `contradicted`.
+9. Block final output on `contradicted`. Flag `partial` in draft and report. Never collapse to binary pass/fail.
+
+## 11A. Practitioner-Identified Failure Modes
+
+*Source: AI governance advisor with practitioner validation. These failure modes surface under real litigation pressure, not in testing.*
+
+---
+
+### Failure Mode 1: Citation Drift
+
+**What it is:** The model retrieves the correct case but misreads or misrepresents the ratio decidendi. The citation is real, the proposition attributed to it is not. This is harder to catch than a hallucinated citation because the case exists and the URL resolves.
+
+**Why it is dangerous:** A lawyer relying on the draft submits a pleading citing *Kesavananda Bharati* for a proposition it does not stand for. The court rejects the argument. Practitioner trust is gone before the product gets traction.
+
+**Design response:**
+- Citation verification must include **ratio extraction**: pull the specific paragraph(s) that support the proposition, not just confirm the case exists.
+- Store `verified_excerpt`, `paragraph_number`, and `proposition_stated` in `Authority` records.
+- The `CitationVerification` pipeline must compare the drafted proposition against the extracted excerpt, not just against the case name or neutral citation.
+- Verification status must be tri-state: `verified` (excerpt matches), `partial` (case real, proposition unconfirmed), `contradicted` (case says the opposite). Never collapse to binary.
+- Block final output if any authority is `contradicted`. Flag `partial` explicitly in the draft and in the verification report.
+
+**Where this lands:** §10 (Research System Redesign), §12 (Reflection Architecture), citation verification pipeline.
+
+---
+
+### Failure Mode 2: Jurisdictional Conflation
+
+**What it is:** Indian and foreign (UK, Singapore, US, Australian) precedents share retrieval corpora. The model presents a Privy Council opinion or a Singapore Court of Appeal judgment as persuasive Indian authority without flagging that it carries different binding weight, different limitation doctrines, or different procedural assumptions.
+
+**Why it is dangerous:** Indian courts apply a strict hierarchy — Supreme Court of India binds all; High Courts bind within territory; foreign cases are persuasive only and must be introduced as such with a reason. Conflation contaminates the argument structure and can embarrass the filing lawyer.
+
+**Design response:**
+- Every `Authority` record must carry `jurisdiction`, `court_tier` (binding / persuasive-domestic / persuasive-foreign / academic), and `country`.
+- The research system must **tag corpus provenance at indexing time**, not at retrieval time. Indian Kanoon returns primarily Indian law; Tavily/open web returns mixed.
+- The prompt for the drafting node must receive authorities **pre-separated by tier**: binding SC/HC authorities in one section, persuasive domestic in another, persuasive foreign in a third, with explicit treatment instructions per tier.
+- The critic pass in the reflection pipeline must check: "are any foreign authorities cited as binding?" Flag as a procedure defect if so.
+- Jurisdictional corpus separation is a retrieval architecture requirement, not just a prompt instruction.
+
+**Where this lands:** §9 (Legal Knowledge Architecture), §10 (Research), `Authority` model in §6.
+
+---
+
+### Failure Mode 3: Confidentiality Bleed
+
+**What it is:** In a multi-client or multi-lawyer workflow, facts, strategies, authorities, and drafted text from one matter surface in another. This can happen through shared vector embeddings, shared retrieval collections, shared session context, or shared in-memory research caches.
+
+**Why it is dangerous:** Legal professional privilege and attorney-client confidentiality are absolute obligations. A single bleed event — even a test event — terminates the relationship with the firm and invites bar council disciplinary action. This is not a product bug; it is a professional liability.
+
+**Design response:**
+- **Matter-level isolation is mandatory, not optional.** Every Postgres query that touches facts, documents, authorities, drafts, chronology items, research sessions, or feedback must include a `matter_id` and `firm_id` predicate. No full-table scans without tenant scope.
+- **Qdrant collections must be partitioned per matter or per firm**, not shared across the platform. Use separate Qdrant collections or payload-filtered namespaces where collection-per-matter is operationally expensive.
+- **In-process research caches** (retrieved judgments, extracted propositions, vector results) must be scoped to the current `thread_id` / `matter_id` and garbage-collected at the end of the run. Never persist to a shared module-level cache.
+- **LangGraph checkpointer state must be keyed by `thread_id` AND `matter_id`.** Two threads sharing a `thread_id` from different matters is a bleed vector.
+- **Lawyer-identity facts from SOUL.md must not be injected into prompts for matters belonging to a different firm** in a multi-tenant deployment.
+- The security audit log must record every cross-matter access attempt, whether successful or blocked.
+- Add a test: `test_matter_isolation.py` — create two matters, populate each with distinct facts, run research on one, assert that retrieved context contains zero fact objects from the other.
+
+**Where this lands:** §15 (Security Architecture), §6 (Matter Workspace update rules), §4 (LexMemory OS).
+
+---
+
+### Architecture Insights from the Advisor
+
+**1. Matter-level context boundaries**
+
+The current design conflates matter context (durable legal state) with session context (the current LangGraph run). They have different lifetimes, different access rules, and different failure consequences. A session can be discarded. A matter cannot.
+
+*Design implication:* The `LexState` graph state is ephemeral run context. The `Matter Workspace` tables are permanent. Every node that reads or writes legal facts should read from and write to Workspace tables, not just `LexState` fields. `LexState` carries references (IDs) into the Workspace, not the data itself.
+
+**2. Jurisdictional corpus separation**
+
+Generic RAG systems mix everything into one vector space. Legal RAG cannot. A corpus that mixes SC opinions, UK Privy Council decisions, secondary commentary, and news articles produces jurisdictionally contaminated retrieval that will consistently mispresent binding authority.
+
+*Design implication:* Maintain separate retrieval namespaces: `corpus:india_sc`, `corpus:india_hc:{state}`, `corpus:privy_council`, `corpus:foreign_persuasive`, `corpus:statutes`, `corpus:regulations`, `corpus:firm_docs`. Query across namespaces with explicit tier weights, not flat cosine search. Research Counsel must surface which corpus each authority came from.
+
+**3. Grounding drafting in procedural history, not just case law**
+
+A court-ready pleading is grounded in the procedural history of the specific matter — prior orders, interim reliefs, filed documents, dates — as much as in case law. Generic legal RAG answers "what does the law say?" but does not answer "given what this court has already ordered in this matter, what must the next application say?"
+
+*Design implication:* Before the drafting node runs, the Evidence Counsel and Procedure Counsel sub-steps (or prompt sections) must inject:
+- The matter chronology.
+- Prior court orders extracted from uploaded documents.
+- Filed documents and their dates.
+- Relevant limitation events.
+This is distinct from case law research. It is matter-file research. Both are required. Neither substitutes for the other.
+
+---
 
 ## 11. Reflection Architecture
 
@@ -772,6 +880,14 @@ Required final state:
 - Key rotation CLI.
 - Secrets backend: env, Vault, AWS.
 - CORS wildcard forbidden in enterprise mode.
+
+**Matter-level confidentiality isolation** (see §11A Failure Mode 3 — Confidentiality Bleed):
+- Every query touching facts, documents, authorities, drafts, research sessions, chronology, or feedback must include both `firm_id` AND `matter_id` predicates. No exceptions.
+- Qdrant collections must be namespaced per firm or per matter. Never use a single shared collection across firms.
+- LangGraph checkpointer state must be keyed by `(thread_id, matter_id)`. Sharing a `thread_id` across matters is a bleed vector.
+- In-process research caches (retrieved judgments, vector results, extracted propositions) must be scoped to the current run and cleared at completion. No module-level shared cache.
+- SOUL.md lawyer identity must not be injected into prompts for matters belonging to a different firm in multi-tenant mode.
+- Add `test_matter_isolation.py`: create two matters, populate each with distinct named facts, run research on matter A, assert that retrieved context contains zero `Fact` or `Authority` objects from matter B.
 
 Important contradiction resolved:
 - `Security_features.md` suggests Fernet in places; `Enterprise_10x10_Plan.md` and live `security/crypto.py` correctly choose AES-256-GCM + HKDF. Keep AES-GCM.

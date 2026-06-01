@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from typing import Generator, Optional
 
 from lexagent.runtime.models import AgentApproval, AgentJob, AgentRun, AgentStep
@@ -245,3 +246,59 @@ class PostgresRuntimeRepository:
                 conn.execute("UPDATE agent_jobs SET status='paused' WHERE job_id=%s", (job_id,))
             conn.commit()
         return approval
+
+    def get_queued_jobs(self, limit: int = 10) -> list[AgentJob]:
+        """Fetch the oldest queued jobs, ordered FIFO."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT job_id, matter_id, run_id, type, agent, status,
+                       requires_approval, payload_json, created_at,
+                       started_at, completed_at, error
+                FROM agent_jobs
+                WHERE status = 'queued'
+                ORDER BY created_at ASC
+                LIMIT %s
+                """,
+                (limit,),
+            ).fetchall()
+        return [
+            AgentJob(
+                job_id=r[0], matter_id=r[1], run_id=r[2], type=r[3],
+                agent=r[4], status=r[5], requires_approval=r[6],
+                payload=r[7] or {}, created_at=str(r[8]),
+                started_at=str(r[9]) if r[9] else None,
+                completed_at=str(r[10]) if r[10] else None,
+                error=r[11],
+            )
+            for r in rows
+        ]
+
+    def update_job_status(self, job_id: str, status: str) -> None:
+        now = datetime.now(tz=timezone.utc).isoformat()
+        with self._connect() as conn:
+            if status == "running":
+                conn.execute(
+                    "UPDATE agent_jobs SET status=%s, started_at=%s WHERE job_id=%s",
+                    (status, now, job_id),
+                )
+            elif status in ("completed", "failed", "cancelled"):
+                conn.execute(
+                    "UPDATE agent_jobs SET status=%s, completed_at=%s WHERE job_id=%s",
+                    (status, now, job_id),
+                )
+            else:
+                conn.execute(
+                    "UPDATE agent_jobs SET status=%s WHERE job_id=%s",
+                    (status, job_id),
+                )
+            conn.commit()
+
+    def fail_job(self, job_id: str, error: str) -> None:
+        now = datetime.now(tz=timezone.utc).isoformat()
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE agent_jobs SET status='failed', completed_at=%s, error=%s WHERE job_id=%s",
+                (now, error, job_id),
+            )
+            conn.commit()

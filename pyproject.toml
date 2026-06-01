@@ -30,6 +30,9 @@ dependencies = [
     "uvicorn[standard]>=0.30",
     "python-multipart>=0.0.9",
     "apscheduler>=3.10",
+    # Phase 1: JWT auth + AES-256-GCM (python-jose uses the cryptography backend)
+    "python-jose[cryptography]>=3.3.0",
+    "cryptography>=42.0",
     # R1: Kanoon REST API client
     "httpx>=0.27",
     "prompt-toolkit>=3.0.52",
@@ -61,6 +64,8 @@ dev-dependencies = [
     "playwright>=1.59.0",
     # R1: HTTP mocking for Kanoon API tests (no live network calls)
     "respx>=0.21",
+    # Phase 1: password/API-key hashing (argon2id)
+    "argon2-cffi>=23.1",
 ]
 
 [tool.pytest.ini_options]

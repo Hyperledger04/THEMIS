@@ -115,3 +115,82 @@ class EvidenceItem(BaseModel):
     source_anchor_ids: list[str] = Field(default_factory=list)
     confidence: float = 0.0
     created_at: str = Field(default_factory=_now_iso)
+
+
+class Party(BaseModel):
+    party_id: str = Field(default_factory=lambda: new_id("party"))
+    matter_id: str
+    name: str
+    role: Literal["complainant", "respondent", "applicant", "opponent", "witness", "other"] = "other"
+    address: Optional[str] = None
+    contact: Optional[str] = None
+    created_at: str = Field(default_factory=_now_iso)
+
+
+class Issue(BaseModel):
+    issue_id: str = Field(default_factory=lambda: new_id("issue"))
+    matter_id: str
+    text: str
+    category: Optional[str] = None
+    status: Literal["open", "resolved", "dropped"] = "open"
+    source_anchor_ids: list[str] = Field(default_factory=list)
+    created_at: str = Field(default_factory=_now_iso)
+
+
+class Authority(BaseModel):
+    authority_id: str = Field(default_factory=lambda: new_id("auth"))
+    matter_id: str
+    authority_type: Literal["case", "statute", "regulation", "circular", "order"] = "case"
+    title: str
+    citation: Optional[str] = None
+    court: Optional[str] = None
+    url: Optional[str] = None
+    proposition: str
+    treatment: Literal["binding", "persuasive", "distinguished", "overruled", "unknown"] = "unknown"
+    verified: bool = False
+    source_anchor_ids: list[str] = Field(default_factory=list)
+    created_at: str = Field(default_factory=_now_iso)
+
+
+class Draft(BaseModel):
+    draft_id: str = Field(default_factory=lambda: new_id("draft"))
+    matter_id: str
+    doc_type: str
+    version: int = 1
+    content: str
+    status: Literal["draft", "under_review", "approved", "filed"] = "draft"
+    verification_report_id: Optional[str] = None
+    created_at: str = Field(default_factory=_now_iso)
+
+
+class FeedbackItem(BaseModel):
+    feedback_id: str = Field(default_factory=lambda: new_id("feedback"))
+    matter_id: Optional[str] = None
+    user_id: str
+    target_type: Literal["draft", "research", "authority", "risk", "skill", "checklist"]
+    target_id: Optional[str] = None
+    signal: Literal["accepted", "rejected", "edited", "preferred", "corrected"]
+    note: Optional[str] = None
+    diff: Optional[str] = None
+    created_at: str = Field(default_factory=_now_iso)
+
+
+class Deadline(BaseModel):
+    deadline_id: str = Field(default_factory=lambda: new_id("deadline"))
+    matter_id: str
+    title: str
+    due_date: str
+    deadline_type: Literal["limitation", "filing", "hearing", "notice", "other"] = "other"
+    status: Literal["upcoming", "overdue", "completed", "waived"] = "upcoming"
+    source_anchor_ids: list[str] = Field(default_factory=list)
+    created_at: str = Field(default_factory=_now_iso)
+
+
+class Task(BaseModel):
+    task_id: str = Field(default_factory=lambda: new_id("task"))
+    matter_id: str
+    title: str
+    status: Literal["pending", "in_progress", "completed", "cancelled"] = "pending"
+    assigned_to: Optional[str] = None
+    due_date: Optional[str] = None
+    created_at: str = Field(default_factory=_now_iso)

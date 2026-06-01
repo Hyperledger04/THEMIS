@@ -153,7 +153,9 @@ async def test_run_citation_gate_drops_bad_findings():
 
     state = {"matter_type": "cheque", "user_input": "cheque bounce"}
     mock_lim = MagicMock(return_value={"risk": "low"})
+    mock_cfg = MagicMock(enable_kanoon=True, kanoon_api_key="test-key", tavily_enabled=False, tavily_api_key=None)
     with (
+        patch("lexagent.nodes.react_research.LexConfig", return_value=mock_cfg),
         patch("lexagent.nodes.react_research._run_kanoon_search", new_callable=AsyncMock, return_value=[bad, good]),
         patch("lexagent.nodes.react_research._run_tavily_search", new_callable=AsyncMock, return_value=[]),
         patch("lexagent.tools.registry.ToolRegistry.get", return_value=mock_lim),
@@ -172,7 +174,9 @@ async def test_run_includes_agent_trace():
     """run() must include research_agent_trace with step entries."""
     state = {"user_input": "landlord tenant eviction"}
     mock_lim = MagicMock(return_value={"risk": "low"})
+    mock_cfg = MagicMock(enable_kanoon=True, kanoon_api_key="test-key", tavily_enabled=False, tavily_api_key=None)
     with (
+        patch("lexagent.nodes.react_research.LexConfig", return_value=mock_cfg),
         patch("lexagent.nodes.react_research._run_kanoon_search", new_callable=AsyncMock, return_value=[]),
         patch("lexagent.nodes.react_research._run_tavily_search", new_callable=AsyncMock, return_value=[]),
         patch("lexagent.tools.registry.ToolRegistry.get", return_value=mock_lim),
@@ -190,7 +194,11 @@ async def test_run_includes_agent_trace():
 async def test_run_exception_returns_error_key():
     """Unhandled exception in run() must return {'error': ...}, not raise."""
     state = {"user_input": "test"}
-    with patch("lexagent.nodes.react_research._run_kanoon_search", side_effect=RuntimeError("boom")):
+    mock_cfg = MagicMock(enable_kanoon=True, kanoon_api_key="test-key", tavily_enabled=False, tavily_api_key=None)
+    with (
+        patch("lexagent.nodes.react_research.LexConfig", return_value=mock_cfg),
+        patch("lexagent.nodes.react_research._run_kanoon_search", side_effect=RuntimeError("boom")),
+    ):
         result = await run(state)
     assert "error" in result
     assert "boom" in result["error"]

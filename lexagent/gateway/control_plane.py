@@ -30,10 +30,14 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="LexAgent Control Plane", version="9.0")
 
-# WHY: Allow all origins in dev mode. In production, restrict to the lexanodes/ domain.
+# WHY: Personal mode uses wildcard CORS for local dev convenience.
+# Multi-tenant/enterprise mode restricts to cfg.cors_origins (set via LEX_CORS_ORIGINS).
+# V3 Phase 1: remove the permanent wildcard — it was forbidden in enterprise mode.
+_boot_cfg = LexConfig()
+_cors_origins = _boot_cfg.cors_origins if _boot_cfg.multi_tenant else ["*"]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -59,21 +63,32 @@ def _verify_token(
     cfg: LexConfig = Depends(_get_cfg),
 ) -> dict:
     """
-    Simple bearer token auth. Passes firm_id and user_id extracted from the token.
-    WHY: In single-lawyer mode (api_secret_key is None) auth is skipped so CLI
-    and local dev work without any setup.
+    JWT bearer auth. Personal mode (no api_secret_key) skips auth entirely.
+    Enterprise mode verifies the JWT signed with api_secret_key and extracts
+    firm_id, user_id, and role from the token claims.
+
+    WHY JWT over static bearer: tokens carry identity (firm_id/user_id/role)
+    so the control plane does not need a DB lookup on every request. Stolen
+    tokens expire in 15 minutes (ACCESS_TOKEN_EXPIRE_MINUTES in tokens.py).
     """
     if not cfg.api_secret_key:
-        return {"firm_id": cfg.default_firm_id, "user_id": "default"}
+        # Personal mode — single-lawyer local dev, no auth overhead.
+        return {"firm_id": cfg.default_firm_id, "user_id": "default", "role": "admin"}
 
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing bearer token")
 
     token = authorization.split(" ", 1)[1]
-    if token != cfg.api_secret_key:
-        raise HTTPException(status_code=403, detail="Invalid token")
-
-    return {"firm_id": cfg.default_firm_id, "user_id": "default"}
+    try:
+        from lexagent.security.tokens import decode_access_token
+        payload = decode_access_token(token, cfg.api_secret_key)
+        return {
+            "firm_id": payload.get("firm_id", cfg.default_firm_id),
+            "user_id": payload.get("sub", "default"),
+            "role": payload.get("role", "associate"),
+        }
+    except Exception:
+        raise HTTPException(status_code=403, detail="Invalid or expired token")
 
 
 # ---------------------------------------------------------------------------

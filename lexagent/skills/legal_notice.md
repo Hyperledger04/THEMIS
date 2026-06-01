@@ -90,6 +90,7 @@ Note: A copy of this notice is retained in my client's file.
 - Specific Relief Act, 1963 — S.21 (notice before suit for specific performance)
 
 ## Output Rules
+- **OVERRIDE base formatting**: Do NOT number header fields (From, To, Date, Subject). These are letterhead/address elements, not body paragraphs. Number only the substantive body paragraphs 1 through N as shown in the structure template above. Never produce headings like "1. From:" or "2. Date:" — those are wrong for a legal notice.
 - Always state the demand with precision: exact rupee amount, exact property address, exact action required
 - Always state the deadline with the number in both digits and words: "15 (fifteen) days"
 - State the consequences of non-compliance explicitly

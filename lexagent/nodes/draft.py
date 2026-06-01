@@ -240,9 +240,37 @@ def _build_draft_instruction(state: LexState) -> str:
         instruction += (
             "\n\nIMPORTANT: No pre-verified research is available for this draft. "
             "Only cite cases you are highly confident exist. "
-            "Flag any citation you include as [UNVERIFIED — human review required] "
-            "since the citation verification node has not run."
+            "Do NOT place [UNVERIFIED] tags inside the document body — that is unprofessional. "
+            "Instead, list any citations you are uncertain about in a separate section after "
+            "the Plain English Summary, headed **Citations Requiring Verification**. "
+            "The document body must read as a clean, professional legal document."
         )
+
+    # ── RAG: inject retrieved template and past-draft examples ───────────────
+    # WHY: template_chunks ground the document structure in a gold-standard format,
+    # eliminating the numbered-header and formatting issues from generic prompts.
+    # past_draft_chunks provide stylistic continuity across similar matters.
+    retrieval_chunks = state.get("retrieval_chunks") or []
+    template_chunks = [c for c in retrieval_chunks if c.get("type") == "template"]
+    past_draft_chunks = [c for c in retrieval_chunks if c.get("type") == "past_draft"]
+
+    if template_chunks:
+        instruction = (
+            "\n\n--- REFERENCE TEMPLATE (follow this structure and format exactly) ---\n"
+            + template_chunks[0]["content"]
+            + "\n--- END TEMPLATE ---\n\n"
+            "Draft the document following the above template's structure, formatting, and tone. "
+            "Adapt it to the specific facts of this matter — fill in every placeholder with "
+            "real details from the matter brief. Never leave placeholder text like '[___]' "
+            "if the information is available above.\n\n"
+            + instruction
+        )
+
+    if past_draft_chunks:
+        instruction += "\n\n--- EXAMPLES FROM PAST SIMILAR MATTERS (style reference only) ---\n"
+        for chunk in past_draft_chunks[:2]:
+            instruction += f"\n[From matter {chunk['source']}]:\n{chunk['content'][:800]}\n"
+        instruction += "--- END EXAMPLES ---\n"
 
     instruction += "\n\nAfter the document, provide a Plain English Summary (2-3 sentences for the client)."
     return instruction

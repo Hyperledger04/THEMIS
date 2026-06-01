@@ -1,0 +1,66 @@
+version: "3.9"
+
+# LexAgent infrastructure stack.
+# WHY two-file env strategy: .env.docker is committed (safe defaults only).
+# Secrets (API keys, JWT secret, encryption key) go in .env.local which is
+# gitignored. The control plane picks both up via pydantic-settings.
+
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.9.7
+    restart: unless-stopped
+    ports:
+      - "6333:6333"   # REST + gRPC
+      - "6334:6334"   # gRPC
+    volumes:
+      - qdrant_data:/qdrant/storage
+    environment:
+      QDRANT__SERVICE__HTTP_PORT: 6333
+      QDRANT__SERVICE__GRPC_PORT: 6334
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: lexagent
+      POSTGRES_USER: lexagent
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lexagent_dev}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lexagent"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  lexagent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://lexagent:${POSTGRES_PASSWORD:-lexagent_dev}@postgres:5432/lexagent
+      QDRANT_URL: http://qdrant:6333
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    volumes:
+      - lexagent_home:/root/.lexagent
+
+volumes:
+  qdrant_data:
+  postgres_data:
+  lexagent_home:
