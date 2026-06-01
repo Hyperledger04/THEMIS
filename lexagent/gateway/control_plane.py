@@ -319,11 +319,24 @@ async def ws_endpoint(
     """
     cfg = LexConfig()
 
-    # Auth: mirror _verify_token logic. Reject before accept() to avoid
-    # upgrading the connection for unauthorised callers.
-    if cfg.api_secret_key and token != cfg.api_secret_key:
-        await websocket.close(code=4403)
-        return
+    # Auth: decode JWT before accepting the WebSocket upgrade so unauthorised
+    # callers never get a connection. Personal mode (no api_secret_key) skips auth.
+    # WHY JWT here instead of the old static-secret comparison: the token carries
+    # firm_id/user_id claims, which the old approach could not provide.
+    ws_firm_id = cfg.default_firm_id
+    ws_user_id = user_id
+    if cfg.api_secret_key:
+        if not token:
+            await websocket.close(code=4403)
+            return
+        try:
+            from lexagent.security.tokens import decode_access_token
+            claims = decode_access_token(token, cfg.api_secret_key)
+            ws_firm_id = claims.get("firm_id", cfg.default_firm_id)
+            ws_user_id = claims.get("sub", user_id)
+        except Exception:
+            await websocket.close(code=4403)
+            return
 
     await websocket.accept()
     graph = get_graph(cfg)
@@ -331,8 +344,8 @@ async def ws_endpoint(
     langgraph_cfg = {
         "configurable": {
             "thread_id": matter_id,
-            "user_id": user_id,
-            "firm_id": cfg.default_firm_id,
+            "user_id": ws_user_id,
+            "firm_id": ws_firm_id,
         }
     }
 
@@ -350,8 +363,8 @@ async def ws_endpoint(
             "user_input": user_text,
             "matter_id": matter_id,
             "messages": [{"role": "user", "content": user_text}],
-            "firm_id": cfg.default_firm_id,
-            "user_id": user_id,
+            "firm_id": ws_firm_id,
+            "user_id": ws_user_id,
         }
         if is_new:
             state["intake_complete"] = False

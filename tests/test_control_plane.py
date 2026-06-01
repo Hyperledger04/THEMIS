@@ -248,11 +248,10 @@ def test_ws_closes_4403_on_wrong_token(client):
 
 
 def test_ws_accepts_correct_token(client):
-    """ws_endpoint accepts connection when token matches api_secret_key."""
+    """ws_endpoint accepts connection when a valid JWT is provided."""
     graph = _make_graph_mock()
     snapshot = MagicMock()
     snapshot.values = {}
-    graph.aget_state = AsyncMock(return_value=snapshot)
     final_snap = MagicMock()
     final_snap.values = {"draft_output": None, "plain_english_summary": None,
                          "intake_complete": False, "error": None}
@@ -264,16 +263,20 @@ def test_ws_accepts_correct_token(client):
 
     graph.astream_events = fake_stream
 
+    # Patch decode_access_token so the test stays offline (no python-jose needed).
+    fake_claims = {"firm_id": "firm1", "sub": "user1", "role": "admin"}
+
     with (
         patch("lexagent.gateway.control_plane.get_graph", return_value=graph),
         patch("lexagent.gateway.control_plane.LexConfig") as cfg_cls,
+        patch("lexagent.security.tokens.decode_access_token", return_value=fake_claims),
     ):
         cfg = MagicMock()
         cfg.api_secret_key = "secret"
         cfg.default_firm_id = "firm1"
         cfg_cls.return_value = cfg
 
-        with client.websocket_connect("/ws/user1/M-test?token=secret") as ws:
+        with client.websocket_connect("/ws/user1/M-test?token=any.valid.jwt") as ws:
             ws.send_text(json.dumps({"text": "I need to draft an injunction."}))
             done = ws.receive_json()
             assert done["type"] == "done"
