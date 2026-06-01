@@ -212,6 +212,19 @@ async def run_chat(cfg: LexConfig) -> None:
     recent_matters = list_sessions(limit=3, sessions_db=cfg.sessions_db)
     system_prompt = _build_chat_system_prompt(recent_matters)
 
+    # Auto-inject the most recent matter's full state so the LLM can answer
+    # "load the last matter" without needing a show_matter tool call to succeed.
+    if recent_matters:
+        last_mid = recent_matters[0].get("matter_id")
+        if last_mid:
+            try:
+                last_matter_text = _tool_show_matter(last_mid, cfg)
+                system_prompt = system_prompt + (
+                    f"\n\nMOST RECENT MATTER (auto-loaded, ID: {last_mid}):\n{last_matter_text}"
+                )
+            except Exception:
+                pass
+
     # T2-D: inject practice wisdom accumulated from past drafts.
     # WHY: Wisdom is loaded once at startup — cheap read, high value for the LLM.
     try:
@@ -240,13 +253,14 @@ async def run_chat(cfg: LexConfig) -> None:
     recent_lines = ""
     if recent_matters:
         items = []
-        for m in recent_matters:
+        for i, m in enumerate(recent_matters):
             try:
                 days_ago = (datetime.now() - datetime.fromisoformat(m["created_at"])).days
                 age = f"{days_ago}d ago" if days_ago > 0 else "today"
             except Exception:
                 age = ""
-            items.append(f"[dim]  • {m.get('matter_id','?')}: {m.get('matter_type','?')} [{age}][/dim]")
+            label = " [cyan](loaded)[/cyan]" if i == 0 else ""
+            items.append(f"[dim]  • {m.get('matter_id','?')}: {m.get('matter_type','?')} [{age}][/dim]{label}")
         recent_lines = "\n[dim]Recent matters:[/dim]\n" + "\n".join(items)
 
     console.print()
@@ -450,9 +464,11 @@ async def _tool_draft(
 
     try:
         from lexagent.memory.session_store import init_db, save_session
+        from lexagent.memory.matter_memory import save_matter_memory
         db_path = Path(cfg.sessions_db).expanduser()
         init_db(db_path)
         save_session(state, db_path)
+        save_matter_memory(mid, state, Path(cfg.matters_dir).expanduser())  # type: ignore[arg-type]
     except Exception:
         pass
 
@@ -567,11 +583,38 @@ def _tool_list_matters(cfg: LexConfig) -> str:
 
 def _tool_show_matter(matter_id: str, cfg: LexConfig) -> str:
     from lexagent.memory.matter_memory import load_matter_memory
+    from lexagent.memory.session_store import get_session_state
 
     memory = load_matter_memory(matter_id, Path(cfg.matters_dir).expanduser())
-    if not memory:
-        return f"No matter found with ID {matter_id}."
-    return memory
+    if memory:
+        return memory
+
+    # Fall back to SQLite — chat-mode drafts save there, not to MEMORY.md on disk.
+    state = get_session_state(matter_id, cfg.sessions_db)
+    if not state:
+        return f"Matter {matter_id} not found in memory or session history."
+
+    parties = state.get("parties") or {}
+    if isinstance(parties, dict):
+        parties_str = "; ".join(f"{k}: {v}" for k, v in parties.items() if v)
+    else:
+        parties_str = str(parties)
+
+    lines = [
+        f"# Matter — {matter_id}",
+        f"**Type:** {state.get('matter_type') or '—'}",
+        f"**Parties:** {parties_str or '—'}",
+        f"**Jurisdiction:** {state.get('jurisdiction') or '—'}",
+        f"**Purpose:** {state.get('purpose') or '—'}",
+    ]
+    if state.get("plain_english_summary"):
+        lines.append(f"\n**Summary:** {state['plain_english_summary']}")
+    if state.get("statutes_cited"):
+        lines.append(f"\n**Statutes cited:** {', '.join(state['statutes_cited'])}")
+    if state.get("draft_output"):
+        draft_preview = state["draft_output"][:500]
+        lines.append(f"\n**Draft (preview):**\n{draft_preview}{'...' if len(state['draft_output']) > 500 else ''}")
+    return "\n".join(lines)
 
 
 def _tool_search_kb(query: str, cfg: LexConfig) -> str:

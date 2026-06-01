@@ -122,6 +122,10 @@ def list_matters(matters_dir: str = "~/.lexagent/matters") -> list[dict]:
         mem_path = d / MEMORY_FILENAME
         snap_path = d / STATE_FILENAME
 
+        # Skip ghost directories that were created but never saved — no content at all.
+        if not mem_path.exists() and not snap_path.exists():
+            continue
+
         entry: dict = {
             "matter_id": d.name,
             "last_modified": datetime.fromtimestamp(d.stat().st_mtime).strftime("%Y-%m-%d %H:%M"),
