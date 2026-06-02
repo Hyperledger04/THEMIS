@@ -25,6 +25,9 @@ class ProviderProfile:
     eu_sovereign: bool = False
     local: bool = False
     description: str = ""
+    # Privacy tier for this provider (1=local-only … 5=consumer).
+    # Used by TierFloorMiddleware to refuse calls weaker than the firm floor.
+    inference_tier: int = 4
 
     def model_string(self, model_name: str) -> str:
         """Build the LiteLLM model string for this provider + model."""

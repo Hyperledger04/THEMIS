@@ -90,8 +90,93 @@ def delete_playbook(playbook_id: str, user_dir: str = _USER_DIR_DEFAULT) -> bool
     return False
 
 
-def playbook_to_prompt(pb: dict) -> str:
-    """Render a playbook as a system prompt block for injection into contract review."""
+def load_playbook_spec(playbook_id: str, user_dir: str = _USER_DIR_DEFAULT):
+    """
+    Load a single playbook as a typed PlaybookSpec.
+
+    WHY separate from load_playbook():
+      load_playbook() returns Optional[dict] and three CLI callers depend on that.
+      This function returns Optional[PlaybookSpec] for the new PlaybookExecutor.
+      Both functions coexist — no existing callers are broken.
+    """
+    from lexagent.contract.models import PlaybookSpec
+    pb = load_playbook(playbook_id, user_dir)
+    if pb is None:
+        return None
+    return PlaybookSpec.from_dict(pb)
+
+
+def generate_playbook(contract_text: str, model: str = "anthropic/claude-sonnet-4-6") -> dict:
+    """
+    Auto-generate a playbook dict from a sample contract via the LLM.
+    Returns a raw dict (not PlaybookSpec) so it can be passed to create_playbook().
+
+    WHY sync: Called from the CLI `lex playbook generate` command which runs
+    in a threadpool. Avoids adding an async entry point to the CLI.
+    """
+    import asyncio
+    import json as _json
+
+    import litellm
+
+    system = (
+        "You are a contract drafting assistant. Analyse the contract and extract "
+        "the firm's standard negotiating positions as structured JSON.\n"
+        "Return ONLY valid JSON with this schema:\n"
+        '{"id": "auto_generated", "name": "string", "contract_type": "string", '
+        '"positions": [{"clause": "string", "our_position": "string", "rationale": "string"}], '
+        '"notes": "string or null"}'
+    )
+
+    async def _call():
+        resp = await litellm.acompletion(
+            model=model,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": f"Contract:\n\n{contract_text[:60_000]}"},
+            ],
+            response_format={"type": "json_object"},
+            request_timeout=60,
+        )
+        return resp.choices[0].message.content or "{}"
+
+    raw = asyncio.run(_call())
+    try:
+        return _json.loads(raw)
+    except Exception:
+        return {"id": "auto_generated", "name": "Generated Playbook", "contract_type": "unknown", "positions": []}
+
+
+def playbook_to_prompt(pb) -> str:
+    """
+    Render a playbook as a system prompt block for injection into contract review.
+
+    Accepts both a raw dict (existing CLI callers) and a PlaybookSpec (new executor).
+    WHY isinstance branch: PlaybookSpec uses attribute access; dicts use .get().
+    """
+    from lexagent.contract.models import PlaybookSpec as _PlaybookSpec
+    if isinstance(pb, _PlaybookSpec):
+        name = pb.name
+        pb_id = pb.id
+        contract_type = pb.contract_type
+        positions_iter = pb.positions
+        notes = pb.notes
+
+        lines = [
+            f"## Firm Playbook — {name}",
+            f"Contract type: {contract_type}",
+            "",
+            "### Our Standard Positions",
+        ]
+        for pos in positions_iter:
+            lines.append(f"**{pos.clause}**: {pos.our_position}")
+            if pos.rationale:
+                lines.append(f"  Rationale: {pos.rationale}")
+        if notes:
+            lines.append(f"\n### Notes\n{notes}")
+        return "\n".join(lines)
+
+    # Original dict path — unchanged for backward compatibility
     lines = [
         f"## Firm Playbook — {pb.get('name', pb['id'])}",
         f"Contract type: {pb.get('contract_type', '—')}",

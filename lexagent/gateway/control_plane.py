@@ -43,6 +43,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# WHY: TierFloorMiddleware must be registered AFTER CORS so CORS preflight
+# OPTIONS requests are handled before tier enforcement (browsers send OPTIONS
+# without X-Inference-Tier, which would produce spurious 403s otherwise).
+from lexagent.gateway.tier_middleware import TierFloorMiddleware  # noqa: E402
+app.add_middleware(TierFloorMiddleware)
+
 # Phase 9B: Mount the voice gateway router at /voice.
 # WHY: All gateways share the same FastAPI app so they reuse the Postgres
 # checkpointer, auth middleware, and CORS config without a second process.
@@ -411,6 +417,67 @@ async def ws_endpoint(
             await websocket.close()
         except Exception:
             pass
+
+
+# ---------------------------------------------------------------------------
+# F3: Runtime halt endpoint
+# ---------------------------------------------------------------------------
+
+@app.post("/api/v1/matters/{matter_id}/runs/{run_id}/halt")
+async def halt_run(
+    matter_id: str,
+    run_id: str,
+    claims: dict = Depends(_verify_token),
+    cfg: LexConfig = Depends(_get_cfg),
+) -> JSONResponse:
+    """
+    Externally cancel all queued/running jobs for a run.
+    Sets agent_jobs.status='cancelled' for any job in this run that is
+    not already completed/failed, then marks the run halt_state='external_halt'.
+
+    WHY: Long-running parallel research jobs can be stopped mid-flight without
+    killing the worker process. The worker's HaltFlag checks this status at
+    the start of each step and stops cleanly.
+    """
+    if not cfg.postgres_url:
+        raise HTTPException(status_code=503, detail="Runtime database not configured")
+
+    try:
+        from lexagent.runtime.postgres import PostgresRuntimeRepository
+        repo = PostgresRuntimeRepository(cfg.postgres_url)
+
+        # Cancel all active jobs belonging to this run
+        with repo._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT job_id FROM agent_jobs
+                WHERE run_id = %s AND status IN ('queued', 'running', 'paused')
+                """,
+                (run_id,),
+            ).fetchall()
+
+        cancelled_count = 0
+        for row in rows:
+            repo.cancel_job(row[0], reason="external_halt")
+            cancelled_count += 1
+
+        # Mark the run itself as halted
+        with repo._connect() as conn:
+            conn.execute(
+                "UPDATE agent_runs SET halt_state = 'external_halt' WHERE run_id = %s",
+                (run_id,),
+            )
+            conn.commit()
+
+        logger.info(
+            "Run %s halted by user=%s: %d jobs cancelled",
+            run_id, claims.get("user_id"), cancelled_count,
+        )
+        return JSONResponse({"halted": True, "run_id": run_id, "jobs_cancelled": cancelled_count})
+
+    except Exception as exc:
+        logger.exception("halt_run failed for run_id=%s: %s", run_id, exc)
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 # ---------------------------------------------------------------------------

@@ -302,3 +302,63 @@ class PostgresRuntimeRepository:
                 (now, error, job_id),
             )
             conn.commit()
+
+    # ------------------------------------------------------------------
+    # F3: Runtime brake methods
+    # ------------------------------------------------------------------
+
+    def get_job_status(self, job_id: str) -> Optional[str]:
+        """Return the current status string for a job, or None if not found."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT status FROM agent_jobs WHERE job_id = %s",
+                (job_id,),
+            ).fetchone()
+        return str(row[0]) if row else None
+
+    def cancel_job(self, job_id: str, reason: str) -> None:
+        """Externally cancel a running or queued job (sets status='cancelled')."""
+        now = datetime.now(tz=timezone.utc).isoformat()
+        with self._connect() as conn:
+            conn.execute(
+                """
+                UPDATE agent_jobs
+                SET status = 'cancelled', completed_at = %s, error = %s
+                WHERE job_id = %s
+                """,
+                (now, reason, job_id),
+            )
+            conn.commit()
+
+    def update_job_activity(
+        self,
+        job_id: str,
+        cost_usd_delta: float,
+        phase: str,
+    ) -> None:
+        """
+        Record a job heartbeat: bump last_activity_at, add cost, update phase.
+        Called after each LLM step so HaltFlag's idle check stays accurate.
+        """
+        now = datetime.now(tz=timezone.utc).isoformat()
+        with self._connect() as conn:
+            conn.execute(
+                """
+                UPDATE agent_jobs
+                SET last_activity_at = %s,
+                    cost_usd = cost_usd + %s,
+                    current_phase = %s
+                WHERE job_id = %s
+                """,
+                (now, cost_usd_delta, phase, job_id),
+            )
+            conn.commit()
+
+    def get_run_cost(self, run_id: str) -> float:
+        """Sum cost_usd across all jobs for a run. Returns 0.0 if no jobs found."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT COALESCE(SUM(cost_usd), 0) FROM agent_jobs WHERE run_id = %s",
+                (run_id,),
+            ).fetchone()
+        return float(row[0]) if row else 0.0

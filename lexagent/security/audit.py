@@ -26,6 +26,31 @@ from typing import Optional
 
 _SCHEMA_VERSION = 3
 
+
+class AuditAction:
+    """Canonical audit action strings — import these instead of bare strings."""
+    # Auth
+    AUTH_LOGIN = "auth.login"
+    AUTH_LOGOUT = "auth.logout"
+    AUTH_TOKEN_ISSUED = "auth.token_issued"
+    AUTH_TOKEN_REVOKED = "auth.token_revoked"
+    # Matter / draft lifecycle
+    MATTER_CREATED = "matter.created"
+    MATTER_ACCESSED = "matter.accessed"
+    DRAFT_GENERATED = "draft.generated"
+    DOCUMENT_UPLOADED = "document.uploaded"
+    RESEARCH_RUN = "research.run"
+    # Inference privacy tier
+    INFERENCE_ROUTED = "inference.routed"
+    INFERENCE_TIER_VIOLATION = "inference.tier_violation"
+    # PII anonymization
+    PII_ANONYMIZED = "pii.anonymized"
+    PII_RESTORED = "pii.restored"
+    # Runtime brakes
+    JOB_COST_CAP = "job.cost_cap"
+    JOB_HALTED = "job.halted"
+    JOB_PHASE_VIOLATION = "job.phase_violation"
+
 _CREATE_TABLE = """
 CREATE TABLE IF NOT EXISTS audit_log (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -285,7 +285,12 @@ async def run(state: LexState) -> dict:
             messages.append(msg)
 
         from lexagent.nodes._llm import call_llm
-        result = await call_llm(messages, config, model_override=config.chat_model)
+        result = await call_llm(
+            messages,
+            config,
+            model_override=config.chat_model,
+            matter_id=state.get("matter_id"),
+        )
         response_text = result["content"]
         extracted = _parse_extraction(response_text)
 

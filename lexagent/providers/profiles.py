@@ -18,6 +18,7 @@ PROVIDERS: list[ProviderProfile] = [
         env_vars=("ANTHROPIC_API_KEY",),
         fallback_models=("claude-haiku-4-5-20251001", "claude-sonnet-4-6"),
         default_model="claude-sonnet-4-6",
+        inference_tier=4,
         description="Best for legal drafting. Supports extended thinking and prompt caching.",
     ),
     ProviderProfile(
@@ -27,6 +28,7 @@ PROVIDERS: list[ProviderProfile] = [
         env_vars=("OPENAI_API_KEY",),
         fallback_models=("gpt-4o-mini", "gpt-4o"),
         default_model="gpt-4o",
+        inference_tier=4,
         description="Strong reasoning. Good for complex analysis.",
     ),
     ProviderProfile(
@@ -36,6 +38,7 @@ PROVIDERS: list[ProviderProfile] = [
         env_vars=("GOOGLE_API_KEY",),
         fallback_models=("gemini-1.5-flash", "gemini-1.5-pro"),
         default_model="gemini-1.5-pro",
+        inference_tier=4,
         description="Long context window. Good for large document review.",
     ),
     ProviderProfile(
@@ -46,6 +49,7 @@ PROVIDERS: list[ProviderProfile] = [
         fallback_models=("llama-3.1-8b-instant", "llama-3.3-70b-versatile"),
         default_model="llama-3.3-70b-versatile",
         free=True,
+        inference_tier=5,
         description="Fastest inference available. Free tier. Great for intake questions.",
     ),
     ProviderProfile(
@@ -55,6 +59,7 @@ PROVIDERS: list[ProviderProfile] = [
         env_vars=("DEEPSEEK_API_KEY",),
         fallback_models=("deepseek-chat",),
         default_model="deepseek-chat",
+        inference_tier=4,
         description="Cheap and strong. Excellent value for high-volume drafting.",
     ),
     ProviderProfile(
@@ -65,6 +70,7 @@ PROVIDERS: list[ProviderProfile] = [
         fallback_models=("mistral-small-latest", "mistral-large-latest"),
         default_model="mistral-large-latest",
         eu_sovereign=True,
+        inference_tier=4,
         description="EU data residency. Required for GDPR-strict European law firms.",
     ),
     ProviderProfile(
@@ -74,6 +80,7 @@ PROVIDERS: list[ProviderProfile] = [
         env_vars=("XAI_API_KEY",),
         fallback_models=("grok-beta",),
         default_model="grok-beta",
+        inference_tier=4,
         description="Strong reasoning model with real-time web access.",
     ),
     ProviderProfile(
@@ -83,6 +90,7 @@ PROVIDERS: list[ProviderProfile] = [
         env_vars=("OPENROUTER_API_KEY",),
         fallback_models=("meta-llama/llama-3.1-8b-instruct:free",),
         default_model="anthropic/claude-sonnet-4-6",
+        inference_tier=4,
         description="Routes to 200+ models. One key for everything.",
     ),
     ProviderProfile(
@@ -95,6 +103,7 @@ PROVIDERS: list[ProviderProfile] = [
         default_model="llama3.2",
         free=True,
         local=True,
+        inference_tier=1,
         description="Runs on your machine. Zero API calls. Full privacy for client data.",
     ),
     ProviderProfile(
@@ -107,6 +116,7 @@ PROVIDERS: list[ProviderProfile] = [
         default_model="local-model",
         free=True,
         local=True,
+        inference_tier=1,
         description="Local models via LM Studio GUI. Uses OpenAI-compat API.",
     ),
     ProviderProfile(
@@ -116,6 +126,7 @@ PROVIDERS: list[ProviderProfile] = [
         env_vars=("TOGETHER_API_KEY",),
         fallback_models=("meta-llama/Llama-3-8b-chat-hf",),
         default_model="meta-llama/Llama-3-70b-chat-hf",
+        inference_tier=4,
         description="Open-source models at competitive prices.",
     ),
     ProviderProfile(
@@ -125,6 +136,7 @@ PROVIDERS: list[ProviderProfile] = [
         env_vars=("AZURE_API_KEY", "AZURE_API_BASE"),
         fallback_models=(),
         default_model="gpt-4o",
+        inference_tier=3,
         description="Azure-hosted OpenAI. Required for Azure enterprise agreements.",
     ),
     ProviderProfile(
@@ -134,6 +146,7 @@ PROVIDERS: list[ProviderProfile] = [
         env_vars=("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"),
         fallback_models=("anthropic.claude-3-sonnet-20240229-v1:0",),
         default_model="anthropic.claude-3-5-sonnet-20241022-v2:0",
+        inference_tier=3,
         description="AWS-hosted models. For firms with AWS enterprise agreements.",
     ),
     ProviderProfile(
@@ -143,6 +156,7 @@ PROVIDERS: list[ProviderProfile] = [
         env_vars=("NVIDIA_NIM_API_KEY",),
         fallback_models=("meta/llama-3.1-8b-instruct",),
         default_model="meta/llama-3.1-70b-instruct",
+        inference_tier=3,
         description="GPU-accelerated inference via NVIDIA cloud.",
     ),
     ProviderProfile(
@@ -153,6 +167,7 @@ PROVIDERS: list[ProviderProfile] = [
         base_url="",
         fallback_models=(),
         default_model="custom-model",
+        inference_tier=2,
         description="Any OpenAI-compatible endpoint. Enter the base URL manually.",
     ),
 ]

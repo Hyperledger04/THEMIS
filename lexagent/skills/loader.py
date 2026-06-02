@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Optional
+from typing import NamedTuple, Optional
 
 import yaml
 
@@ -18,6 +18,57 @@ import yaml
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
+
+class SkillMatch(NamedTuple):
+    """Return type for load_skill_with_tier(). Separates body from tier metadata."""
+    body: str
+    min_tier: int
+
+
+def load_skill_with_tier(
+    matter_type: str,
+    bundled_skills_dir: str | Path,
+    user_skills_dir: str | Path,
+) -> Optional[SkillMatch]:
+    """
+    Like load_skill() but returns a SkillMatch(body, min_tier) instead of a plain str.
+
+    min_tier is read from the skill YAML frontmatter field `min_inference_tier`
+    (default 4 if absent). Callers can enforce the tier before injecting the body.
+
+    WHY a separate function instead of changing load_skill():
+      load_skill() returns Optional[str] and 11 existing tests depend on that.
+      Changing the return type would break all of them. This parallel function
+      gives new callers tier metadata without touching the original API.
+    """
+    if not matter_type or not matter_type.strip():
+        return None
+
+    bundled = _skills_from_dir(Path(bundled_skills_dir))
+    user = _skills_from_dir(Path(str(user_skills_dir)).expanduser())
+
+    by_name: dict[str, dict] = {}
+    for skill in bundled:
+        if skill["name"]:
+            by_name[skill["name"]] = skill
+    for skill in user:
+        if skill["name"]:
+            by_name[skill["name"]] = skill
+
+    skills = list(by_name.values())
+    normalised = _normalise(matter_type)
+
+    for skill in skills:
+        if normalised in [_normalise(mt) for mt in skill["matter_types"]]:
+            return SkillMatch(body=skill["body"], min_tier=skill["min_tier"])
+
+    for skill in skills:
+        for kw in skill["trigger_keywords"]:
+            if kw.lower() in matter_type.lower():
+                return SkillMatch(body=skill["body"], min_tier=skill["min_tier"])
+
+    return None
 
 
 def load_skill(
@@ -111,6 +162,7 @@ def _parse_frontmatter(content: str) -> dict:
         "trigger_keywords": _as_list(meta.get("trigger_keywords", [])),
         "matter_types": _as_list(meta.get("matter_types", [])),
         "body": body,
+        "min_tier": int(meta.get("min_inference_tier", 4)),
     }
 
 

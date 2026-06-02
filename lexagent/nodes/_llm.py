@@ -19,7 +19,7 @@
 # Memory always goes in the user turn so the system prompt stays cacheable.
 
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Optional
 
 import litellm
 
@@ -35,6 +35,8 @@ async def call_llm(
     stream_cb: Callable[[str], None] | None = None,
     system: str | None = None,
     model_override: str | None = None,
+    matter_id: Optional[str] = None,
+    is_document_context: bool = False,
 ) -> dict:
     """
     Single async entry point for all LLM calls.
@@ -51,6 +53,23 @@ async def call_llm(
     Returns:
         {"content": str, "tool_calls": list | None}
     """
+    # Route through InferenceGateway when anonymization is enabled.
+    # Gateway handles PII anonymization, de-anonymization, and routing log.
+    # When disabled (default), falls through to direct litellm call below.
+    if cfg.anonymization_enabled:
+        from lexagent.gateway.inference import get_gateway
+        gw = get_gateway(cfg)
+        return await gw.call(
+            messages,
+            cfg,
+            matter_id=matter_id,
+            is_document_context=is_document_context,
+            tools=tools,
+            stream_cb=stream_cb,
+            system=system,
+            model_override=model_override,
+        )
+
     model = model_override or build_model_string(cfg)
     if system:
         messages = [{"role": "system", "content": system}] + messages

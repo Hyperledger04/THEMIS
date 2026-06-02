@@ -196,6 +196,8 @@ async def answer_question(
             {"role": "user", "content": prompt},
         ],
         cfg,
+        # Document context — bypass PII anonymization to preserve citation accuracy
+        is_document_context=True,
     )
     return result["content"].strip(), cited_chunks
 

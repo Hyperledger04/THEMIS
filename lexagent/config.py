@@ -243,6 +243,44 @@ class LexConfig(BaseSettings):
     # ----------------------------------------------------------------
     voice_gateway_enabled: bool = Field(False, validation_alias=AliasChoices("LEX_VOICE_ENABLED", "voice_gateway_enabled"))
 
+    # ----------------------------------------------------------------
+    # Phase 1.5–3: Privacy Tier Floors, Anonymization, Runtime Brakes, Playbooks
+    # Inspired by LQ.AI's inference tier system and runtime brake design.
+    # All fields default to safe no-op values — existing behaviour is unchanged.
+    # ----------------------------------------------------------------
+
+    # F1: Inference tier floors
+    # inference_tier_floor enforces a minimum privacy tier for all LLM calls.
+    # 1=local-only, 2=self-hosted, 3=enterprise-managed, 4=standard-cloud, 5=consumer.
+    # Default 4 (standard cloud) is permissive and matches existing behaviour.
+    inference_tier_floor: int = Field(4, validation_alias=AliasChoices("LEX_INFERENCE_TIER_FLOOR", "inference_tier_floor"))
+    # Set True to enable Tier 5 (consumer/free) providers — disabled by default.
+    inference_tier_t5_enabled: bool = Field(False, validation_alias=AliasChoices("LEX_TIER5_ENABLED", "inference_tier_t5_enabled"))
+
+    # F2: PII anonymization
+    # Master switch — False by default so existing deployments are unaffected.
+    anonymization_enabled: bool = Field(False, validation_alias=AliasChoices("LEX_ANONYMIZATION_ENABLED", "anonymization_enabled"))
+    # Matter IDs listed here bypass anonymization entirely — for work product
+    # where real party names must be preserved (e.g., verified citation drafts).
+    anonymization_privileged_matters: List[str] = Field(
+        default_factory=list,
+        validation_alias=AliasChoices("LEX_PRIVILEGED_MATTERS", "anonymization_privileged_matters"),
+    )
+
+    # F3: Runtime brakes
+    # Per-session USD cost cap — worker halts when accumulated cost exceeds this.
+    # 0.0 = disabled (no cap). Set to e.g. 5.0 for a $5 session budget.
+    cost_cap_session_usd: float = Field(0.0, validation_alias=AliasChoices("LEX_COST_CAP_SESSION", "cost_cap_session_usd"))
+    # Per-job USD cost cap — individual job halt threshold.
+    cost_cap_job_usd: float = Field(0.0, validation_alias=AliasChoices("LEX_COST_CAP_JOB", "cost_cap_job_usd"))
+    # Idle timeout in minutes — worker halts a job that has not made progress.
+    # 0 = disabled. Default 30 minutes suits long legal research jobs.
+    idle_timeout_minutes: int = Field(0, validation_alias=AliasChoices("LEX_IDLE_TIMEOUT_MINUTES", "idle_timeout_minutes"))
+
+    # F4: Playbook execution DAGs
+    # False by default — existing contract_review node behaviour is unchanged.
+    playbook_execution_enabled: bool = Field(False, validation_alias=AliasChoices("LEX_PLAYBOOK_EXECUTION", "playbook_execution_enabled"))
+
     # STT (Speech-to-Text) backend: "whisper" | "deepgram" | "stub"
     # WHY: stub is the safe default — no API key required, tests pass offline.
     stt_backend: str = Field("stub", validation_alias=AliasChoices("LEX_STT_BACKEND", "stt_backend"))

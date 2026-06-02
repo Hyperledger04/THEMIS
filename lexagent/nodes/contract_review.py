@@ -18,6 +18,40 @@ from rich.console import Console
 from lexagent.config import LexConfig
 from lexagent.state import LexState
 
+
+def _enqueue_playbook_job(cfg: LexConfig, state: LexState, document_path: str) -> None:
+    """
+    Enqueue an async playbook_review AgentJob for the active playbook.
+    Called when cfg.playbook_execution_enabled=True and a playbook_id is set.
+    Fire-and-forget: does not block the main review pipeline.
+
+    WHY here instead of inside run():
+      Keeps run() readable; this side-effect is optional and isolated.
+    """
+    try:
+        if not cfg.postgres_url:
+            return
+        playbook_id = state.get("active_playbook_id")
+        if not playbook_id:
+            return
+
+        from lexagent.runtime.models import AgentJob
+        from lexagent.runtime.postgres import PostgresRuntimeRepository
+
+        repo = PostgresRuntimeRepository(cfg.postgres_url)
+        matter_id = state.get("matter_id", "unknown")
+        run_id = state.get("run_id", "unknown")
+        job = AgentJob(
+            matter_id=matter_id,
+            run_id=run_id,
+            type="playbook_review",
+            agent="drafting_agent",
+            payload={"playbook_id": playbook_id, "document_path": document_path},
+        )
+        repo.create_job(job)
+    except Exception:
+        pass  # playbook enqueue must never crash the main review
+
 console = Console()
 
 # WHY: Hard cap on contract text fed to the LLM. Most commercial contracts are
@@ -171,6 +205,10 @@ async def run(state: LexState) -> dict:
         )
 
         risk_analysis = _build_risk_analysis(full_report)
+
+        # F4: Enqueue a background playbook DAG job when enabled
+        if cfg.playbook_execution_enabled and state.get("active_playbook_id"):
+            _enqueue_playbook_job(cfg, state, str(pdf_path))
 
         console.print(
             f"[green]✓ Contract review complete:[/green] "

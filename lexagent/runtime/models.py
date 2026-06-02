@@ -43,6 +43,10 @@ class AgentRun(BaseModel):
     created_at: str = Field(default_factory=_now_iso)
     started_at: Optional[str] = None
     completed_at: Optional[str] = None
+    # F3: Runtime brakes fields — all default to safe no-op values
+    cost_total_usd: float = 0.0
+    cost_cap_reached: bool = False
+    halt_state: Optional[str] = None
 
 
 class AgentJob(BaseModel):
@@ -58,6 +62,11 @@ class AgentJob(BaseModel):
     started_at: Optional[str] = None
     completed_at: Optional[str] = None
     error: Optional[str] = None
+    # F3: Runtime brakes fields — all default to safe no-op values
+    cost_usd: float = 0.0
+    last_activity_at: Optional[str] = None
+    current_phase: str = "init"
+    phase_gates: dict = Field(default_factory=dict)
 
 
 class AgentStep(BaseModel):
