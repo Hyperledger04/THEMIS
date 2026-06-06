@@ -362,3 +362,32 @@ class PostgresRuntimeRepository:
                 (run_id,),
             ).fetchone()
         return float(row[0]) if row else 0.0
+
+    # ------------------------------------------------------------------
+    # AgentArtifact
+    # ------------------------------------------------------------------
+
+    def create_artifact(self, artifact) -> None:
+        """Persist an AgentArtifact produced by a job handler."""
+        import json as _json
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO agent_artifacts
+                    (artifact_id, matter_id, run_id, job_id, artifact_type,
+                     title, payload_json, source_anchor_ids, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s)
+                """,
+                (
+                    artifact.artifact_id,
+                    artifact.matter_id,
+                    artifact.run_id,
+                    artifact.job_id,
+                    artifact.artifact_type,
+                    artifact.title,
+                    _json.dumps(artifact.payload),
+                    _json.dumps(artifact.source_anchor_ids),
+                    artifact.created_at,
+                ),
+            )
+            conn.commit()

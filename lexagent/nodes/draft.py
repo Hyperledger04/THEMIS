@@ -68,6 +68,7 @@ def build_system_prompt_blocks(
     skill_content: Optional[str],
     use_cache_control: bool,
     agent: Optional[dict] = None,
+    wisdom_text: Optional[str] = None,
 ) -> "list | str":
     """
     Build the system prompt in the format needed for the chosen caching path.
@@ -115,6 +116,9 @@ def build_system_prompt_blocks(
     if skill_content:
         parts.append(f"## Active Skill\n{skill_content}")
 
+    if wisdom_text and wisdom_text.strip():
+        parts.append(f"## Learned from Past Similar Matters\n{wisdom_text}")
+
     combined = "\n\n---\n\n".join(parts) if parts else ""
 
     if use_cache_control:
@@ -151,7 +155,7 @@ def _load_prompt(filename: str) -> str:
     return prompt_path.read_text(encoding="utf-8")
 
 
-def _build_string_system_prompt(state: LexState, base_prompt: str) -> str:
+def _build_string_system_prompt(state: LexState, base_prompt: str, wisdom_text: Optional[str] = None) -> str:
     """
     Build the string-form system prompt for non-Anthropic providers.
     Injects SOUL.md and active skill into the base template placeholders.
@@ -171,6 +175,7 @@ def _build_string_system_prompt(state: LexState, base_prompt: str) -> str:
         skill_content=state.get("active_skill"),
         use_cache_control=False,
         agent=state.get("active_agent"),
+        wisdom_text=wisdom_text,
     )
 
     return (
@@ -314,6 +319,18 @@ async def run(state: LexState) -> dict:
             and config.enable_prompt_caching
         )
 
+        wisdom_text = ""
+        try:
+            from lexagent.memory.wisdom import get_relevant_wisdom
+            wisdom_text = get_relevant_wisdom(
+                matter_type=state.get("matter_type"),
+                jurisdiction=state.get("jurisdiction"),
+                home_dir=config.home_dir,
+                max_entries=6,
+            )
+        except Exception:
+            pass
+
         full_output = ""
 
         if use_anthropic_caching:
@@ -325,6 +342,7 @@ async def run(state: LexState) -> dict:
                 skill_content=state.get("active_skill"),
                 use_cache_control=True,
                 agent=state.get("active_agent"),
+                wisdom_text=wisdom_text,
             )
             messages = [
                 {"role": "system", "content": system_blocks},
@@ -345,7 +363,7 @@ async def run(state: LexState) -> dict:
         else:
             # Layer 1 only: direct litellm streaming (any provider) + LiteLLM disk cache
             base_prompt = _load_prompt("base_system.md")
-            system_prompt_str = _build_string_system_prompt(state, base_prompt)
+            system_prompt_str = _build_string_system_prompt(state, base_prompt, wisdom_text=wisdom_text)
 
             messages = [
                 {"role": "system", "content": system_prompt_str},

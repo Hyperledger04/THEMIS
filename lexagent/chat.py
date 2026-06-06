@@ -67,8 +67,17 @@ _TOOLS = [
         "function": {
             "name": "draft_document",
             "description": (
-                "Draft a legal document from a complete brief. "
-                "Only call when you have: matter type, parties, jurisdiction, and purpose."
+                "Draft a court-ready legal document. Call ONCE when brief is complete.\n\n"
+                "Required for ALL matters: matter_type, parties, jurisdiction, purpose.\n\n"
+                "Collect these BEFORE calling based on matter type:\n"
+                "  LEGAL NOTICE: demand amount, cause of action date, notice period\n"
+                "  WRIT PETITION: article invoked (226/32), fundamental right violated,\n"
+                "                 alternative remedy exhausted (yes/no), relief sought\n"
+                "  BAIL APPLICATION: offence sections, bail type (regular/anticipatory/default), custody duration\n"
+                "  PLAINT: court valuation (₹), limitation applicable (yes/no), specific reliefs\n"
+                "  CONTRACT/NDA: key clauses, duration, governing law\n"
+                "  INJUNCTION: urgency, irreparable harm facts\n\n"
+                "Pack ALL known details into the brief — dates, amounts, names, addresses, cheque/account numbers."
             ),
             "parameters": {
                 "type": "object",
@@ -139,6 +148,28 @@ _TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "check_limitation",
+            "description": (
+                "Calculate limitation period under Limitation Act 1963. "
+                "Call when lawyer asks if a matter is time-barred or mentions a cause of action date. "
+                "Returns: applicable article, period, expiry date, time-barred status."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "matter_type": {"type": "string"},
+                    "cause_of_action_date": {
+                        "type": "string",
+                        "description": "YYYY-MM-DD or natural language",
+                    },
+                },
+                "required": ["matter_type", "cause_of_action_date"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "save_document",
             "description": (
                 "Save the last produced draft to the user's Downloads folder as a .docx file. "
@@ -169,23 +200,38 @@ _TOOLS = [
 # ---------------------------------------------------------------------------
 
 
-def _build_chat_system_prompt(recent_matters: list[dict]) -> str:
-    """Inject recent matter summaries into the base system prompt."""
-    if not recent_matters:
-        return _SYSTEM_PROMPT
-    lines = []
-    for m in recent_matters:
-        try:
-            days_ago = (datetime.now() - datetime.fromisoformat(m["created_at"])).days
-            age = f"{days_ago}d ago" if days_ago > 0 else "today"
-        except Exception:
-            age = ""
-        mt = m.get("matter_type") or "?"
-        jur = m.get("jurisdiction") or "?"
-        mid = m.get("matter_id") or "?"
-        lines.append(f"  • {mid}: {mt}, {jur} [{age}]")
-    context = "\n\nRECENT MATTERS (refer to by ID when the lawyer asks):\n" + "\n".join(lines)
-    return _SYSTEM_PROMPT + context
+def _build_chat_system_prompt(recent_matters: list[dict], cfg: LexConfig) -> str:
+    """Inject SOUL identity and recent matter summaries into the base system prompt."""
+    from lexagent.memory.soul import load_soul
+
+    soul = load_soul(cfg.home_dir)
+    identity_block = ""
+    if soul and isinstance(soul, dict):
+        identity_block = (
+            "## LAWYER IDENTITY\n"
+            f"Assisting: {soul.get('name', '')}, {soul.get('firm_name', '')}\n"
+            f"Courts: {soul.get('primary_courts', '')}\n"
+            f"Practice: {soul.get('practice_areas', '')}\n"
+            f"Tone: {soul.get('tone', 'Senior formal')}\n"
+            "Use this identity in all signature blocks unless the brief specifies otherwise.\n\n"
+        )
+
+    matters_block = ""
+    if recent_matters:
+        lines = []
+        for m in recent_matters:
+            try:
+                days_ago = (datetime.now() - datetime.fromisoformat(m["created_at"])).days
+                age = f"{days_ago}d ago" if days_ago > 0 else "today"
+            except Exception:
+                age = ""
+            lines.append(
+                f"  • {m.get('matter_id','?')}: {m.get('matter_type','?')}, "
+                f"{m.get('jurisdiction','?')} [{age}]"
+            )
+        matters_block = "\n\nRECENT MATTERS (refer to by ID when the lawyer asks):\n" + "\n".join(lines)
+
+    return identity_block + _SYSTEM_PROMPT + matters_block
 
 
 async def run_chat(cfg: LexConfig) -> None:
@@ -210,7 +256,7 @@ async def run_chat(cfg: LexConfig) -> None:
 
     # T1-C: load recent matters for context injection.
     recent_matters = list_sessions(limit=3, sessions_db=cfg.sessions_db)
-    system_prompt = _build_chat_system_prompt(recent_matters)
+    system_prompt = _build_chat_system_prompt(recent_matters, cfg)
 
     # Auto-inject the most recent matter's full state so the LLM can answer
     # "load the last matter" without needing a show_matter tool call to succeed.
@@ -336,6 +382,15 @@ async def _execute_tool(
         return _tool_show_matter(inputs.get("matter_id", ""), cfg)
     if name == "search_knowledge_base":
         return _tool_search_kb(inputs.get("query", ""), cfg)
+    if name == "check_limitation":
+        from lexagent.tools.limitation import check_limitation
+        result = check_limitation(
+            matter_type=inputs.get("matter_type", ""),
+            cause_of_action_date=inputs.get("cause_of_action_date", ""),
+        )
+        if isinstance(result, dict):
+            return "\n".join(f"  {k}: {v}" for k, v in result.items())
+        return str(result)
     return f"Unknown tool: {name}"
 
 
@@ -472,7 +527,35 @@ async def _tool_draft(
     except Exception:
         pass
 
-    return f"[Matter ID: {mid}]\n\n{draft}"
+    result_string = f"[Matter ID: {mid}]\n\n{draft}"
+
+    matter_type = state.get("matter_type") or ""
+    similar_note = ""
+    try:
+        from lexagent.memory.session_store import list_sessions
+        all_matters = list_sessions(limit=20, sessions_db=cfg.sessions_db)
+        similar = [
+            m for m in all_matters
+            if matter_type
+            and matter_type.lower() in (m.get("matter_type") or "").lower()
+            and m.get("matter_id") != mid
+        ][:2]
+        if similar:
+            ids = ", ".join(f"{m.get('matter_id')} ({m.get('matter_type')})" for m in similar)
+            similar_note = f"\n  • Cross-reference past matters: {ids}"
+    except Exception:
+        pass
+
+    result_string += (
+        "\n\n---\n"
+        "**Draft ready.** Next steps:\n"
+        "  • Say a filename to save as .docx\n"
+        "  • Ask me to review risk annotations\n"
+        "  • Ask me to check limitation"
+        f"{similar_note}\n"
+        "---"
+    )
+    return result_string
 
 
 async def _tool_save_document(matter_id: str, filename: str, cfg: LexConfig) -> str:

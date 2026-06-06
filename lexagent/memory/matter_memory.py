@@ -89,6 +89,12 @@ def save_matter_memory(matter_id: str, state: LexState, matters_dir: str = "~/.l
     # Also persist the full state as JSON so future sessions can reload it
     _save_state_snapshot(matter_id, state, mdir)
 
+    try:
+        import asyncio
+        asyncio.ensure_future(maybe_compress_memory(matter_id, matters_dir))
+    except Exception:
+        pass
+
     return mem_path
 
 
@@ -154,6 +160,48 @@ def list_matters(matters_dir: str = "~/.lexagent/matters") -> list[dict]:
 # -----------------------------------------------------------------------
 # Internal helpers
 # -----------------------------------------------------------------------
+
+
+def _resolve_memory_path(matter_id: str, matters_dir: str) -> Path:
+    return matter_dir(matter_id, matters_dir) / MEMORY_FILENAME
+
+
+async def maybe_compress_memory(matter_id: str, matters_dir: str, threshold: int = 3) -> None:
+    try:
+        text = load_matter_memory(matter_id, matters_dir)
+        if not text:
+            return
+        MARKER = "## Session"
+        parts = text.split(MARKER)
+        sessions = [p for p in parts[1:] if p.strip()]
+        if len(sessions) <= threshold:
+            return
+
+        to_compress = MARKER + MARKER.join(sessions[:-1])
+        latest = MARKER + sessions[-1]
+
+        from lexagent.nodes._llm import call_llm
+        from lexagent.config import LexConfig
+        haiku = LexConfig(default_model="claude-haiku-4-5-20251001", model_provider="anthropic")
+        result = await call_llm([
+            {"role": "system", "content": "Compress legal session history. Be precise."},
+            {"role": "user", "content": (
+                "Compress into 200-word summary. Preserve: parties, dates, statutes, "
+                "decisions, open items. Remove redundancy.\n\n" + to_compress
+            )},
+        ], haiku)
+        summary = (result.get("content") or "").strip()
+        if not summary:
+            return
+
+        preamble = parts[0].strip()
+        new_text = (
+            (preamble + "\n\n") if preamble else ""
+        ) + f"[Compressed — {len(sessions)-1} session(s)]\n{summary}\n\n{latest}"
+        _resolve_memory_path(matter_id, matters_dir).write_text(new_text.strip() + "\n", encoding="utf-8")
+    except Exception:
+        pass
+
 
 def _save_state_snapshot(matter_id: str, state: LexState, mdir: Path) -> None:
     """

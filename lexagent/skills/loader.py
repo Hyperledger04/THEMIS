@@ -125,6 +125,41 @@ def load_skill(
 # ---------------------------------------------------------------------------
 
 
+def load_skill_stack(
+    matter_type: str,
+    bundled_skills_dir,
+    user_skills_dir,
+    agent_skill_names: list[str] | None = None,
+    token_cap: int = 12000,
+) -> str:
+    """Primary skill for matter_type + secondary skills from agent persona. Hard cap on total chars."""
+    bundled = Path(bundled_skills_dir)
+    user = Path(str(user_skills_dir)).expanduser()
+    blocks, loaded = [], set()
+
+    primary = load_skill(matter_type, bundled, user)
+    if primary:
+        blocks.append(f"## Primary Skill\n{primary}")
+        loaded.add(hash(primary))
+
+    for name in (agent_skill_names or []):
+        content = _load_by_name(name, bundled, user)
+        if content and hash(content) not in loaded:
+            blocks.append(f"## Supporting Skill — {name}\n{content}")
+            loaded.add(hash(content))
+
+    return "\n\n---\n\n".join(blocks)[:token_cap]
+
+
+def _load_by_name(skill_name: str, bundled: Path, user: Path) -> str | None:
+    by_name = {}
+    for s in [*_skills_from_dir(bundled), *_skills_from_dir(user)]:
+        if s["name"]:
+            by_name[s["name"]] = s
+    skill = by_name.get(skill_name)
+    return skill["body"] if skill else None
+
+
 def _skills_from_dir(directory: Path) -> list[dict]:
     """Return parsed skill dicts for every .md file in directory."""
     if not directory.exists() or not directory.is_dir():

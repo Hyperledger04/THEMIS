@@ -2254,6 +2254,78 @@ def wisdom() -> None:
 
 
 # ---------------------------------------------------------------------------
+# lex worker — 24/7 living-agent background worker
+# ---------------------------------------------------------------------------
+
+@app.command(name="worker")
+def worker_cmd(
+    poll_interval: float = typer.Option(5.0, "--poll", help="Seconds between job queue polls."),
+    session_cap: float = typer.Option(0.0, "--session-cap", help="USD hard cap for the whole session (0 = unlimited)."),
+    job_cap: float = typer.Option(0.0, "--job-cap", help="USD hard cap per individual job (0 = unlimited)."),
+    idle_timeout: int = typer.Option(0, "--idle-timeout", help="Cancel job if no LLM activity for N minutes (0 = off)."),
+    max_jobs: int = typer.Option(0, "--max-jobs", help="Stop after processing N jobs (0 = run forever, useful for tests)."),
+) -> None:
+    """
+    Start the LexAgent living-agent worker.
+
+    Polls the Postgres job queue and processes jobs: document ingestion,
+    fact extraction, chronology building, deadline scans, morning briefs,
+    and draft generation.
+
+    Requires LEX_POSTGRES_URL (or DATABASE_URL) to be set.
+    The worker stops cleanly on Ctrl-C.
+    """
+    import asyncio
+
+    from rich.console import Console
+    from rich.panel import Panel
+
+    console = Console()
+
+    try:
+        from lexagent.config import LexConfig
+        cfg = LexConfig()
+        if not cfg.postgres_url:
+            console.print("[bold red]Error:[/bold red] LEX_POSTGRES_URL / DATABASE_URL not set.")
+            raise typer.Exit(code=1)
+    except Exception as exc:
+        console.print(f"[bold red]Config error:[/bold red] {exc}")
+        raise typer.Exit(code=1)
+
+    # Import job handlers to register them before starting the worker
+    import lexagent.runtime.jobs  # noqa: F401
+
+    from lexagent.runtime.postgres import PostgresRuntimeRepository
+    from lexagent.runtime.worker import RuntimeWorker
+
+    repo = PostgresRuntimeRepository(cfg.postgres_url)
+    repo.setup()
+
+    worker = RuntimeWorker(
+        repo=repo,
+        poll_interval=poll_interval,
+        session_cap_usd=session_cap,
+        job_cap_usd=job_cap,
+        idle_timeout_minutes=idle_timeout,
+    )
+
+    console.print(Panel(
+        f"[bold green]LexAgent Worker started[/bold green]\n"
+        f"Poll interval: {poll_interval}s | "
+        f"Session cap: {'$' + str(session_cap) if session_cap else 'unlimited'} | "
+        f"Job cap: {'$' + str(job_cap) if job_cap else 'unlimited'}\n"
+        f"Press [bold]Ctrl-C[/bold] to stop.",
+        border_style="green",
+        padding=(0, 2),
+    ))
+
+    try:
+        asyncio.run(worker.run(max_jobs=max_jobs if max_jobs > 0 else None))
+    except KeyboardInterrupt:
+        console.print("\n[dim]Worker stopped.[/dim]")
+
+
+# ---------------------------------------------------------------------------
 # lex help — rich reference card
 # ---------------------------------------------------------------------------
 

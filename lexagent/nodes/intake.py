@@ -12,7 +12,7 @@ from typing import Optional
 import yaml
 from lexagent.config import LexConfig
 from lexagent.memory.soul import load_soul
-from lexagent.skills.loader import load_skill
+from lexagent.skills.loader import load_skill, load_skill_stack
 from lexagent.state import LexState
 
 # Core fields always required regardless of matter type.
@@ -256,10 +256,11 @@ async def run(state: LexState) -> dict:
             if not state.get("active_skill"):
                 config = LexConfig()
                 bundled_skills = Path(__file__).parent.parent / "skills"
-                skill_content = load_skill(
-                    state.get("matter_type") or "",
+                skill_content = load_skill_stack(
+                    matter_type=state.get("matter_type") or "",
                     bundled_skills_dir=bundled_skills,
                     user_skills_dir=config.skills_dir,
+                    agent_skill_names=(state.get("active_agent") or {}).get("skills", []),
                 )
                 if skill_content:
                     updates["active_skill"] = skill_content
@@ -304,12 +305,13 @@ async def run(state: LexState) -> dict:
         if extracted.get("matter_type"):
             updates["matter_type"] = extracted["matter_type"]
 
-            # Load matching skill
+            # Load matching skill (primary + any agent secondary skills)
             bundled_skills = Path(__file__).parent.parent / "skills"
-            skill_content = load_skill(
-                extracted["matter_type"],
+            skill_content = load_skill_stack(
+                matter_type=extracted["matter_type"],
                 bundled_skills_dir=bundled_skills,
                 user_skills_dir=config.skills_dir,
+                agent_skill_names=(state.get("active_agent") or {}).get("skills", []),
             )
             if skill_content:
                 updates["active_skill"] = skill_content

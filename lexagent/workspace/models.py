@@ -42,7 +42,7 @@ class DocumentRecord(BaseModel):
     filename: str
     mime_type: Optional[str] = None
     storage_uri: str
-    parser: Literal["llamaparse", "pdfplumber", "docx", "ocr", "email", "unknown"] = "unknown"
+    parser: Literal["llamaparse", "pdfplumber", "docx", "ocr", "email", "plaintext", "unknown"] = "unknown"
     page_count: Optional[int] = None
     status: Literal["uploaded", "processing", "indexed", "failed"] = "uploaded"
     created_at: str = Field(default_factory=_now_iso)
