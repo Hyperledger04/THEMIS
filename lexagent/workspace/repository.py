@@ -25,7 +25,11 @@ from lexagent.workspace.models import (
     Issue,
     Matter,
     Party,
+    PlaybookNote,
+    ResearchMemo,
+    RiskAnalysis,
     SourceAnchor,
+    StylePreference,
     Task,
 )
 
@@ -545,43 +549,99 @@ class PostgresWorkspaceRepository:
                 """
                 INSERT INTO authorities
                     (authority_id, matter_id, authority_type, title, citation,
-                     court, url, proposition, treatment, verified,
-                     source_anchor_ids, created_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s)
+                     court, url, proposition, treatment,
+                     jurisdiction, country, court_tier, corpus_namespace,
+                     verified_excerpt, paragraph_number, verification_status,
+                     verified, source_anchor_ids, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s)
                 """,
                 (
                     authority.authority_id, authority.matter_id,
                     authority.authority_type, authority.title, authority.citation,
                     authority.court, authority.url, authority.proposition,
-                    authority.treatment, authority.verified,
+                    authority.treatment,
+                    authority.jurisdiction, authority.country,
+                    authority.court_tier, authority.corpus_namespace,
+                    authority.verified_excerpt, authority.paragraph_number,
+                    authority.verification_status,
+                    authority.verified,
                     json.dumps(authority.source_anchor_ids), authority.created_at,
                 ),
             )
             conn.commit()
         return authority
 
+    def update_authority_verification(
+        self,
+        authority_id: str,
+        matter_id: str,
+        firm_id: str,
+        verification_status: str,
+        verified_excerpt: Optional[str] = None,
+        paragraph_number: Optional[str] = None,
+    ) -> None:
+        """Update citation verification result. Tri-state: verified/partial/contradicted."""
+        verified = verification_status == "verified"
+        with self._connect() as conn:
+            conn.execute(
+                f"""
+                UPDATE authorities
+                SET verification_status = %s,
+                    verified = %s,
+                    verified_excerpt = %s,
+                    paragraph_number = %s
+                WHERE authority_id = %s AND matter_id = %s AND {_FIRM_SCOPE}
+                """,
+                (
+                    verification_status, verified, verified_excerpt, paragraph_number,
+                    authority_id, matter_id, firm_id,
+                ),
+            )
+            conn.commit()
+
     def list_authorities(
-        self, matter_id: str, firm_id: str, verified: Optional[bool] = None
+        self,
+        matter_id: str,
+        firm_id: str,
+        verified: Optional[bool] = None,
+        verification_status: Optional[str] = None,
+        corpus_namespace: Optional[str] = None,
     ) -> list[Authority]:
         with self._connect() as conn:
             base = (
                 f"SELECT authority_id, matter_id, authority_type, title, citation, "
-                f"court, url, proposition, treatment, verified, "
-                f"source_anchor_ids, created_at "
+                f"court, url, proposition, treatment, "
+                f"jurisdiction, country, court_tier, corpus_namespace, "
+                f"verified_excerpt, paragraph_number, verification_status, "
+                f"verified, source_anchor_ids, created_at "
                 f"FROM authorities WHERE matter_id = %s AND {_FIRM_SCOPE}"
             )
-            params: tuple = (matter_id, firm_id)
+            params: list = [matter_id, firm_id]
             if verified is not None:
                 base += " AND verified = %s"
-                params = (matter_id, firm_id, verified)
-            rows = conn.execute(base + " ORDER BY created_at ASC", params).fetchall()
+                params.append(verified)
+            if verification_status is not None:
+                base += " AND verification_status = %s"
+                params.append(verification_status)
+            if corpus_namespace is not None:
+                base += " AND corpus_namespace = %s"
+                params.append(corpus_namespace)
+            rows = conn.execute(
+                base + " ORDER BY court_tier ASC, created_at ASC", tuple(params)
+            ).fetchall()
         return [
             Authority(
                 authority_id=r[0], matter_id=r[1], authority_type=r[2],
                 title=r[3], citation=r[4], court=r[5], url=r[6],
-                proposition=r[7], treatment=r[8], verified=bool(r[9]),
-                source_anchor_ids=r[10] if isinstance(r[10], list) else json.loads(r[10] or "[]"),
-                created_at=str(r[11]),
+                proposition=r[7], treatment=r[8],
+                jurisdiction=r[9], country=r[10],
+                court_tier=r[11], corpus_namespace=r[12],
+                verified_excerpt=r[13], paragraph_number=r[14],
+                verification_status=r[15],
+                verified=bool(r[16]),
+                source_anchor_ids=r[17] if isinstance(r[17], list) else json.loads(r[17] or "[]"),
+                created_at=str(r[18]),
             )
             for r in rows
         ]
@@ -769,3 +829,257 @@ class PostgresWorkspaceRepository:
             )
             conn.commit()
         return item
+
+    def list_feedback(
+        self,
+        user_id: str,
+        firm_id: str,
+        matter_id: Optional[str] = None,
+        target_type: Optional[str] = None,
+        signal: Optional[str] = None,
+        limit: int = 50,
+    ) -> list[FeedbackItem]:
+        with self._connect() as conn:
+            base = (
+                "SELECT feedback_id, matter_id, user_id, target_type, target_id, "
+                "signal, note, diff, created_at FROM feedback_items "
+                "WHERE user_id = %s"
+            )
+            params: list = [user_id]
+            if matter_id is not None:
+                base += " AND matter_id = %s"
+                params.append(matter_id)
+            if target_type is not None:
+                base += " AND target_type = %s"
+                params.append(target_type)
+            if signal is not None:
+                base += " AND signal = %s"
+                params.append(signal)
+            rows = conn.execute(
+                base + " ORDER BY created_at DESC LIMIT %s",
+                tuple(params) + (limit,),
+            ).fetchall()
+        return [
+            FeedbackItem(
+                feedback_id=r[0], matter_id=r[1], user_id=r[2],
+                target_type=r[3], target_id=r[4], signal=r[5],
+                note=r[6], diff=r[7], created_at=str(r[8]),
+            )
+            for r in rows
+        ]
+
+    # ------------------------------------------------------------------
+    # ResearchMemo  (Phase 5 — first-class workspace object)
+    # ------------------------------------------------------------------
+
+    def create_research_memo(self, memo: ResearchMemo) -> ResearchMemo:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO research_memos
+                    (memo_id, matter_id, title, content, query,
+                     authority_ids, source_anchor_ids, agent_run_id, status, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s, %s, %s)
+                """,
+                (
+                    memo.memo_id, memo.matter_id, memo.title, memo.content,
+                    memo.query,
+                    json.dumps(memo.authority_ids),
+                    json.dumps(memo.source_anchor_ids),
+                    memo.agent_run_id, memo.status, memo.created_at,
+                ),
+            )
+            conn.commit()
+        return memo
+
+    def list_research_memos(
+        self, matter_id: str, firm_id: str, status: Optional[str] = None
+    ) -> list[ResearchMemo]:
+        with self._connect() as conn:
+            base = (
+                f"SELECT memo_id, matter_id, title, content, query, "
+                f"authority_ids, source_anchor_ids, agent_run_id, status, created_at "
+                f"FROM research_memos WHERE matter_id = %s AND {_FIRM_SCOPE}"
+            )
+            params: list = [matter_id, firm_id]
+            if status:
+                base += " AND status = %s"
+                params.append(status)
+            rows = conn.execute(base + " ORDER BY created_at DESC", tuple(params)).fetchall()
+        return [
+            ResearchMemo(
+                memo_id=r[0], matter_id=r[1], title=r[2], content=r[3], query=r[4],
+                authority_ids=r[5] if isinstance(r[5], list) else json.loads(r[5] or "[]"),
+                source_anchor_ids=r[6] if isinstance(r[6], list) else json.loads(r[6] or "[]"),
+                agent_run_id=r[7], status=r[8], created_at=str(r[9]),
+            )
+            for r in rows
+        ]
+
+    # ------------------------------------------------------------------
+    # RiskAnalysis  (Phase 5)
+    # ------------------------------------------------------------------
+
+    def create_risk_analysis(self, analysis: RiskAnalysis) -> RiskAnalysis:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO risk_analyses
+                    (risk_id, matter_id, draft_id, title, summary,
+                     risks, agent_run_id, status, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s)
+                """,
+                (
+                    analysis.risk_id, analysis.matter_id, analysis.draft_id,
+                    analysis.title, analysis.summary,
+                    json.dumps(analysis.risks),
+                    analysis.agent_run_id, analysis.status, analysis.created_at,
+                ),
+            )
+            conn.commit()
+        return analysis
+
+    def list_risk_analyses(
+        self, matter_id: str, firm_id: str, draft_id: Optional[str] = None
+    ) -> list[RiskAnalysis]:
+        with self._connect() as conn:
+            base = (
+                f"SELECT risk_id, matter_id, draft_id, title, summary, "
+                f"risks, agent_run_id, status, created_at "
+                f"FROM risk_analyses WHERE matter_id = %s AND {_FIRM_SCOPE}"
+            )
+            params: list = [matter_id, firm_id]
+            if draft_id is not None:
+                base += " AND draft_id = %s"
+                params.append(draft_id)
+            rows = conn.execute(base + " ORDER BY created_at DESC", tuple(params)).fetchall()
+        return [
+            RiskAnalysis(
+                risk_id=r[0], matter_id=r[1], draft_id=r[2],
+                title=r[3], summary=r[4],
+                risks=r[5] if isinstance(r[5], list) else json.loads(r[5] or "[]"),
+                agent_run_id=r[6], status=r[7], created_at=str(r[8]),
+            )
+            for r in rows
+        ]
+
+    # ------------------------------------------------------------------
+    # StylePreference  (Phase 6 — Learning Loop)
+    # ------------------------------------------------------------------
+
+    def upsert_style_preference(self, pref: StylePreference) -> StylePreference:
+        """Insert or update a style preference (idempotent on preference_id)."""
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO style_preferences
+                    (preference_id, user_id, firm_id, matter_type, doc_type,
+                     preference_text, source_feedback_ids, active, created_at, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s)
+                ON CONFLICT (preference_id) DO UPDATE
+                SET preference_text     = EXCLUDED.preference_text,
+                    source_feedback_ids = EXCLUDED.source_feedback_ids,
+                    active              = EXCLUDED.active,
+                    updated_at          = EXCLUDED.updated_at
+                """,
+                (
+                    pref.preference_id, pref.user_id, pref.firm_id,
+                    pref.matter_type, pref.doc_type, pref.preference_text,
+                    json.dumps(pref.source_feedback_ids), pref.active,
+                    pref.created_at, pref.updated_at,
+                ),
+            )
+            conn.commit()
+        return pref
+
+    def list_style_preferences(
+        self,
+        user_id: str,
+        firm_id: str,
+        matter_type: Optional[str] = None,
+        doc_type: Optional[str] = None,
+    ) -> list[StylePreference]:
+        with self._connect() as conn:
+            base = (
+                "SELECT preference_id, user_id, firm_id, matter_type, doc_type, "
+                "preference_text, source_feedback_ids, active, created_at, updated_at "
+                "FROM style_preferences "
+                "WHERE user_id = %s AND firm_id = %s AND active = TRUE"
+            )
+            params: list = [user_id, firm_id]
+            if matter_type is not None:
+                base += " AND (matter_type = %s OR matter_type IS NULL)"
+                params.append(matter_type)
+            if doc_type is not None:
+                base += " AND (doc_type = %s OR doc_type IS NULL)"
+                params.append(doc_type)
+            rows = conn.execute(
+                base + " ORDER BY updated_at DESC", tuple(params)
+            ).fetchall()
+        return [
+            StylePreference(
+                preference_id=r[0], user_id=r[1], firm_id=r[2],
+                matter_type=r[3], doc_type=r[4], preference_text=r[5],
+                source_feedback_ids=r[6] if isinstance(r[6], list) else json.loads(r[6] or "[]"),
+                active=bool(r[7]), created_at=str(r[8]), updated_at=str(r[9]),
+            )
+            for r in rows
+        ]
+
+    # ------------------------------------------------------------------
+    # PlaybookNote  (Phase 6 — Learning Loop)
+    # ------------------------------------------------------------------
+
+    def create_playbook_note(self, note: PlaybookNote) -> PlaybookNote:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO playbook_notes
+                    (note_id, firm_id, matter_type, jurisdiction, court,
+                     observation, source_feedback_ids, active, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s)
+                """,
+                (
+                    note.note_id, note.firm_id, note.matter_type,
+                    note.jurisdiction, note.court, note.observation,
+                    json.dumps(note.source_feedback_ids), note.active, note.created_at,
+                ),
+            )
+            conn.commit()
+        return note
+
+    def list_playbook_notes(
+        self,
+        firm_id: str,
+        matter_type: Optional[str] = None,
+        jurisdiction: Optional[str] = None,
+        court: Optional[str] = None,
+    ) -> list[PlaybookNote]:
+        with self._connect() as conn:
+            base = (
+                "SELECT note_id, firm_id, matter_type, jurisdiction, court, "
+                "observation, source_feedback_ids, active, created_at "
+                "FROM playbook_notes WHERE firm_id = %s AND active = TRUE"
+            )
+            params: list = [firm_id]
+            if matter_type is not None:
+                base += " AND (matter_type = %s OR matter_type IS NULL)"
+                params.append(matter_type)
+            if jurisdiction is not None:
+                base += " AND (jurisdiction = %s OR jurisdiction IS NULL)"
+                params.append(jurisdiction)
+            if court is not None:
+                base += " AND (court = %s OR court IS NULL)"
+                params.append(court)
+            rows = conn.execute(
+                base + " ORDER BY created_at DESC", tuple(params)
+            ).fetchall()
+        return [
+            PlaybookNote(
+                note_id=r[0], firm_id=r[1], matter_type=r[2],
+                jurisdiction=r[3], court=r[4], observation=r[5],
+                source_feedback_ids=r[6] if isinstance(r[6], list) else json.loads(r[6] or "[]"),
+                active=bool(r[7]), created_at=str(r[8]),
+            )
+            for r in rows
+        ]

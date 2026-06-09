@@ -132,7 +132,13 @@ CREATE TABLE IF NOT EXISTS issues (
 CREATE TABLE IF NOT EXISTS authorities (
     authority_id TEXT PRIMARY KEY, matter_id TEXT, authority_type TEXT,
     title TEXT, citation TEXT, court TEXT, url TEXT, proposition TEXT,
-    treatment TEXT, verified INTEGER, source_anchor_ids TEXT, created_at TEXT
+    treatment TEXT,
+    jurisdiction TEXT DEFAULT 'india', country TEXT DEFAULT 'india',
+    court_tier TEXT DEFAULT 'persuasive_domestic',
+    corpus_namespace TEXT DEFAULT 'corpus:india_sc',
+    verified_excerpt TEXT, paragraph_number TEXT,
+    verification_status TEXT DEFAULT 'unverified',
+    verified INTEGER, source_anchor_ids TEXT, created_at TEXT
 );
 CREATE TABLE IF NOT EXISTS drafts (
     draft_id TEXT PRIMARY KEY, matter_id TEXT, doc_type TEXT,

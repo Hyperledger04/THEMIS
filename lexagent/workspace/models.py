@@ -147,6 +147,20 @@ class Authority(BaseModel):
     url: Optional[str] = None
     proposition: str
     treatment: Literal["binding", "persuasive", "distinguished", "overruled", "unknown"] = "unknown"
+    # §11A Failure Mode 2 — Jurisdictional Conflation: every authority must carry
+    # its provenance so retrieval and drafting nodes can separate binding SC opinions
+    # from persuasive foreign cases before they reach any prompt.
+    jurisdiction: str = "india"
+    country: str = "india"
+    court_tier: Literal[
+        "binding_sc", "binding_hc", "persuasive_domestic", "persuasive_foreign", "academic"
+    ] = "persuasive_domestic"
+    corpus_namespace: str = "corpus:india_sc"
+    # §11A Failure Mode 1 — Citation Drift: verification must check the ratio
+    # paragraph, not just that the case exists. tri-state prevents false confidence.
+    verified_excerpt: Optional[str] = None
+    paragraph_number: Optional[str] = None
+    verification_status: Literal["verified", "partial", "contradicted", "unverified"] = "unverified"
     verified: bool = False
     source_anchor_ids: list[str] = Field(default_factory=list)
     created_at: str = Field(default_factory=_now_iso)
@@ -193,4 +207,70 @@ class Task(BaseModel):
     status: Literal["pending", "in_progress", "completed", "cancelled"] = "pending"
     assigned_to: Optional[str] = None
     due_date: Optional[str] = None
+    created_at: str = Field(default_factory=_now_iso)
+
+
+class ResearchMemo(BaseModel):
+    """First-class workspace object for research memos produced by living-agent jobs."""
+
+    memo_id: str = Field(default_factory=lambda: new_id("memo"))
+    matter_id: str
+    title: str
+    content: str
+    query: Optional[str] = None
+    authority_ids: list[str] = Field(default_factory=list)
+    source_anchor_ids: list[str] = Field(default_factory=list)
+    agent_run_id: Optional[str] = None
+    status: Literal["draft", "reviewed", "archived"] = "draft"
+    created_at: str = Field(default_factory=_now_iso)
+
+
+class RiskAnalysis(BaseModel):
+    """Adversarial risk analysis attached to a matter or a specific draft."""
+
+    risk_id: str = Field(default_factory=lambda: new_id("risk"))
+    matter_id: str
+    draft_id: Optional[str] = None
+    title: str
+    summary: str
+    risks: list[dict] = Field(default_factory=list)
+    agent_run_id: Optional[str] = None
+    status: Literal["draft", "reviewed", "archived"] = "draft"
+    created_at: str = Field(default_factory=_now_iso)
+
+
+class StylePreference(BaseModel):
+    """Per-lawyer or per-firm drafting preference extracted from accepted feedback.
+
+    Injected into drafting prompts so the agent learns from accepted edits over time.
+    Suggestions only — core prompts are never silently rewritten (§8C Learning Loop rule).
+    """
+
+    preference_id: str = Field(default_factory=lambda: new_id("pref"))
+    user_id: str
+    firm_id: str = "default"
+    matter_type: Optional[str] = None
+    doc_type: Optional[str] = None
+    preference_text: str
+    source_feedback_ids: list[str] = Field(default_factory=list)
+    active: bool = True
+    created_at: str = Field(default_factory=_now_iso)
+    updated_at: str = Field(default_factory=_now_iso)
+
+
+class PlaybookNote(BaseModel):
+    """Matter-type and court-specific observation captured from lawyer feedback.
+
+    Used by the planner and drafting nodes to adapt to jurisdiction/forum patterns.
+    Never silently overwrites skill files — surfaced as suggestions first.
+    """
+
+    note_id: str = Field(default_factory=lambda: new_id("pnote"))
+    firm_id: str = "default"
+    matter_type: Optional[str] = None
+    jurisdiction: Optional[str] = None
+    court: Optional[str] = None
+    observation: str
+    source_feedback_ids: list[str] = Field(default_factory=list)
+    active: bool = True
     created_at: str = Field(default_factory=_now_iso)
