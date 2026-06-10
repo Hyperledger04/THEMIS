@@ -8,10 +8,12 @@
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 from typing import NamedTuple, Optional
 
+import litellm
 import yaml
 
 
@@ -149,6 +151,129 @@ def load_skill_stack(
             loaded.add(hash(content))
 
     return "\n\n---\n\n".join(blocks)[:token_cap]
+
+
+def build_skills_manifest(
+    bundled_skills_dir: str | Path,
+    user_skills_dir: str | Path,
+) -> dict[str, str]:
+    """
+    Return {name: description} for every skill on disk.
+    User skills with the same name override bundled.
+    Used by route_skills() to build the LLM routing prompt.
+    """
+    bundled = _skills_from_dir(Path(bundled_skills_dir))
+    user = _skills_from_dir(Path(str(user_skills_dir)).expanduser())
+
+    by_name: dict[str, str] = {}
+    for skill in bundled:
+        if skill["name"]:
+            by_name[skill["name"]] = skill["description"]
+    for skill in user:
+        if skill["name"]:
+            by_name[skill["name"]] = skill["description"]
+    return by_name
+
+
+def _string_match_skill_name(
+    matter_type: str,
+    bundled_skills_dir: str | Path,
+    user_skills_dir: str | Path,
+) -> Optional[str]:
+    """
+    Run keyword/matter_type matching and return the skill NAME (not body).
+    Returns None if no match.
+    Used as one of the three consensus sources in skill_router.py.
+    """
+    if not matter_type or not matter_type.strip():
+        return None
+
+    bundled = _skills_from_dir(Path(bundled_skills_dir))
+    user = _skills_from_dir(Path(str(user_skills_dir)).expanduser())
+
+    by_name: dict[str, dict] = {}
+    for skill in bundled:
+        if skill["name"]:
+            by_name[skill["name"]] = skill
+    for skill in user:
+        if skill["name"]:
+            by_name[skill["name"]] = skill
+
+    skills = list(by_name.values())
+    normalised = _normalise(matter_type)
+
+    for skill in skills:
+        if normalised in [_normalise(mt) for mt in skill["matter_types"]]:
+            return skill["name"]
+
+    for skill in skills:
+        for kw in skill["trigger_keywords"]:
+            if kw.lower() in matter_type.lower():
+                return skill["name"]
+
+    return None
+
+
+async def route_skills(
+    matter_summary: str,
+    manifest: dict[str, str],
+    config,
+) -> dict:
+    """
+    Single LiteLLM call to the router model to select relevant skills.
+
+    Returns {"selected": [name, ...], "unmatched": [name, ...]} where:
+      selected  — skill names that exist in manifest AND were chosen
+      unmatched — names the LLM requested but are not in manifest
+
+    Never raises — returns {"selected": [], "unmatched": []} on any exception.
+    """
+    if not manifest:
+        return {"selected": [], "unmatched": []}
+
+    manifest_lines = "\n".join(
+        f"  {name}: {desc}" for name, desc in manifest.items()
+    )
+    system_prompt = (
+        "You are a legal document routing agent. "
+        "Given a matter summary and a list of available skills, "
+        "select the skills that are most relevant for drafting. "
+        "You may select multiple skills. "
+        "Return ONLY valid JSON with keys 'selected' (list of skill names to use) "
+        "and 'unmatched' (list of skill names you wanted but are not available). "
+        "Only include names from the provided list in 'selected'."
+    )
+    user_message = (
+        f"Available skills:\n{manifest_lines}\n\n"
+        f"Matter summary: {matter_summary[:500]}\n\n"
+        "Return JSON only."
+    )
+
+    try:
+        response = await litellm.acompletion(
+            model=config.skill_router_model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message},
+            ],
+            response_format={"type": "json_object"},
+            temperature=0,
+        )
+        raw = response.choices[0].message.content
+        data = json.loads(raw)
+        llm_selected: list[str] = data.get("selected") or []
+        llm_unmatched: list[str] = data.get("unmatched") or []
+
+        # Filter: only keep names that actually exist in manifest
+        valid_selected = [n for n in llm_selected if n in manifest]
+        # Names in selected but not in manifest are also unmatched
+        spurious = [n for n in llm_selected if n not in manifest]
+        all_unmatched = list(dict.fromkeys(llm_unmatched + spurious))
+
+        return {"selected": valid_selected, "unmatched": all_unmatched}
+
+    except Exception:
+        return {"selected": [], "unmatched": []}
 
 
 def _load_by_name(skill_name: str, bundled: Path, user: Path) -> str | None:
