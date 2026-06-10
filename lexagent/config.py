@@ -54,8 +54,9 @@ class LexConfig(BaseSettings):
     # Layer 2 (Anthropic cache_control) cuts server-side input token cost ~75% on the same session.
     enable_prompt_caching: bool = Field(True, validation_alias=AliasChoices("LEX_ENABLE_CACHING", "enable_prompt_caching"))
 
-    # Skill router — uses a cheap fast model for routing decisions (not drafting).
-    # Change via LEX_SKILL_ROUTER_MODEL env var. Any LiteLLM-compatible model string.
+    # WHY: A cheap/fast model is used for skill routing (not drafting) because routing is a
+    # classification decision, not a generation task. gpt-4.1-mini costs ~10x less than
+    # the drafting model and adds <1s latency. Change via LEX_SKILL_ROUTER_MODEL env var.
     skill_router_model: str = Field(
         "openai/gpt-4.1-mini",
         validation_alias=AliasChoices("LEX_SKILL_ROUTER_MODEL", "skill_router_model"),

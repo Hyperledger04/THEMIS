@@ -176,7 +176,7 @@ def _parse_frontmatter(content: str) -> dict:
     """
     Parse YAML frontmatter from a skill .md file.
 
-    Returns a dict with: name, trigger_keywords, matter_types, body (rest of file).
+    Returns a dict with: name, description, trigger_keywords, matter_types, body, min_tier.
     If no frontmatter is found, returns empty metadata with the full content as body.
     """
     # YAML frontmatter is delimited by --- on its own line at start and end
