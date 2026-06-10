@@ -1,5 +1,5 @@
 ---
-name: Filing Checklist
+name: filing_checklist
 description: Pre-filing checklist — court fee, process fee, vakalatnama, index of documents verification.
 trigger_keywords:
   - checklist
