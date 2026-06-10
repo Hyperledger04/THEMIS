@@ -277,6 +277,27 @@ def _build_draft_instruction(state: LexState) -> str:
             instruction += f"\n[From matter {chunk['source']}]:\n{chunk['content'][:800]}\n"
         instruction += "--- END EXAMPLES ---\n"
 
+    # ── S.141 NI Act: conditional block for firm/company accused ──────────
+    # WHY: S.141 extends criminal liability to proprietors, partners, and
+    # directors. Without this explicit instruction, the LLM does not fire the
+    # S.141 paragraph because it doesn't know the accused entity type.
+    # This must be injected here — not left to general prompt guidance —
+    # because the accused_entity_type field is intake-derived, not LLM-inferred.
+    accused_entity_type = state.get("accused_entity_type") or ""
+    if accused_entity_type.lower() in ("proprietorship", "partnership", "company"):
+        instruction += (
+            f"\n\nIMPORTANT — SECTION 141 NI ACT (MANDATORY):\n"
+            f"The accused is a {accused_entity_type}. You MUST include a dedicated paragraph "
+            f"invoking Section 141 of the Negotiable Instruments Act, 1881 AFTER the accused "
+            f"identity paragraph and BEFORE the cause-of-action paragraph.\n"
+            f"This paragraph must:\n"
+            f"  1. State that the named individual(s) were personally responsible for and in "
+            f"     charge of the day-to-day conduct of the business of the {accused_entity_type}.\n"
+            f"  2. Invoke joint and several liability under S.138 read with S.141 NI Act.\n"
+            f"Do NOT skip this paragraph — its absence is a ground for acquittal of the "
+            f"proprietor/partner/director."
+        )
+
     instruction += "\n\nAfter the document, provide a Plain English Summary (2-3 sentences for the client)."
     return instruction
 

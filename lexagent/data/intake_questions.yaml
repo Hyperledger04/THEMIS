@@ -479,3 +479,60 @@ criminal_revision:
       label: "Do you want Supreme Court revision jurisprudence cited?"
       type: binary
       mandatory: false
+
+# ---------------------------------------------------------------------------
+# S.138 NI Act Complaint — cheque dishonour criminal complaint
+# ---------------------------------------------------------------------------
+
+s138_complaint:
+  required:
+    - field: parties
+      label: "Who is the complainant and who are the accused? (e.g., 'M/s. Pinnacle Systems v. Mr. Santosh and Mrs. Shilpy Yadav')"
+      type: open
+      mandatory: true
+
+    - field: accused_entity_type
+      label: "Is the accused an individual, a proprietorship firm, a partnership firm, or a company?"
+      type: mcq
+      options:
+        - "individual"
+        - "proprietorship"
+        - "partnership"
+        - "company"
+      mandatory: true
+
+    - field: jurisdiction
+      label: "Which court has jurisdiction? (e.g., 'CJM Gautam Budh Nagar', 'JMFC Noida')"
+      type: open
+      mandatory: true
+
+    - field: purpose
+      label: "Describe the transaction — what goods/services/loan gave rise to the debt, and what happened with the cheque?"
+      type: open
+      mandatory: true
+
+    - field: cheque_amount
+      label: "What is the cheque amount? (e.g., Rs. 1,07,405)"
+      type: open
+      mandatory: true
+
+    - field: cause_of_action_date
+      label: "When did the cause of action crystallise? (the day after the 15-day notice compliance period expired)"
+      type: open
+      mandatory: true
+
+    - field: notice_date
+      label: "When was the legal demand notice sent to the accused?"
+      type: open
+      mandatory: true
+
+  optional:
+    - field: key_clauses
+      label: "Any specific reliefs or terms to include beyond the standard S.138 prayer?"
+      type: open
+      mandatory: false
+
+    - field: citations_required
+      label: "Do you want the Laxmi Dyechem / Dashrath Rupsingh authorities cited?"
+      type: binary
+      mandatory: false

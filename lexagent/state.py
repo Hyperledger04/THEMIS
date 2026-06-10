@@ -42,6 +42,10 @@ class LexState(TypedDict):
     bail_type: Optional[str]
     offence_section: Optional[str]
     custody_duration: Optional[str]
+    # S.138 NI Act specific — drives S.141 conditional block in draft node
+    accused_entity_type: Optional[str]  # "individual" | "proprietorship" | "partnership" | "company"
+    notice_date: Optional[str]          # Date legal notice was sent (ISO or free-text)
+    cheque_amount: Optional[str]        # Cheque amount in figures (drives prayer_fine_amount)
 
     # --- Research (Phase 4) ---
     research_only: Optional[bool]             # If True, graph stops after research node (no draft)

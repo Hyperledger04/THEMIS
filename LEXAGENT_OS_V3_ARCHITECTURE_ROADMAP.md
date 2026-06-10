@@ -959,6 +959,70 @@ lexagent/
 
 ## 17. Roadmap
 
+### Phase 0: Court-Ready Drafting Engine ⚡ PRIORITY — DO THIS FIRST
+
+**Objective:** Produce court-fileable output. The current draft is factually adequate but assembly-broken.
+**Dependencies:** None — works entirely within the current graph, nodes, and docx_writer.
+**Analysis documents:** `analysis/` folder — generate these first as the implementation specification.
+**Effort:** 1-2 weeks.
+**Why first:** Draft quality is the core product experience. No other phase matters if the output cannot be filed. Every V3 feature (living agent, memory, knowledge layer) produces drafts — all of them will be broken until this is fixed.
+
+**Root cause (from S.138 complaint comparison):**
+Three structural failures, not a prompting problem:
+1. **Lawyer working notes contaminate the filing.** `base_system.md` tells the LLM to append Plain English Summary + Risk Assessment to `draft_output`. `docx_writer.py` writes the entire string to .docx without stripping. Every filed document currently contains the lawyer's risk flags and client summary.
+2. **No court header.** `docx_writer.py` generates "Legal Document" as the title. A court officer sees the formal name of the bench on page one.
+3. **No filing packet.** A complaint is not one document. It is: complaint body + affidavit-in-evidence + witness list + list of documents + vakalatnama. The graph produces one monolithic .docx.
+
+**P0 work — filing-blocking:**
+- `lexagent/tools/docx_writer.py`: parse `draft_output`, split at `---` separator, write only the legal document body to the .docx; route Plain English Summary + Risk Assessment to a separate `lawyer_notes.docx`
+- `lexagent/tools/docx_writer.py:43-60`: replace generic title block with court-profile-aware formal header block (see court profile pivot below)
+- `lexagent/tools/docx_writer.py:49-55`: derive party labels from matter_type schema, not from dict key guessing ("plaintiff" vs "complainant" vs "petitioner")
+- New file `lexagent/skills/s138_complaint.md`: dedicated S.138 complaint skill (separate from the existing demand-notice template at `templates/legal_notice_s138.md`) — full section schema: court header, memo of parties, 14-section structure, S.141 conditional block, *Laxmi Dyechem* citation, EX-CW1/A exhibit labels, "twice the cheque amount" prayer, standalone affidavit template, witness list
+
+**P1 work — structural:**
+- Affidavit-in-evidence as a separate sub-document (second LLM call in DraftNode or new AffidavitNode)
+- Exhibit registry: build canonical exhibit label list from facts before drafting; inject into prompt
+- Review node (`lexagent/nodes/review.py:44-79`): add structural section presence check (mandatory sections: CAUSE OF ACTION, JURISDICTION, LIMITATION, PRAYER)
+- S.141 conditional block: gate on `accused_entity_type` field in `LexState`
+
+**P2 work — quality:**
+- Limitation period as arithmetic (not LLM prose): compute in intake node, inject as verified fact
+- Court profile YAML for top 5 courts (GBN CJM, Delhi HC, Allahabad HC, Punjab HC, Commercial Court Delhi)
+
+**Architectural pivots (from lawyer feedback — override developer-maintained templates):**
+
+*Pivot 1 — Lawyer-defined court profile at setup wizard:*
+- Extend `lex setup` to ask: primary court(s), font preference, font size, line spacing, left margin, paragraph numbering style, exhibit label format, vakalatnama handling, copies per filing, cause title format example
+- Store answers in `~/.lexagent/SOUL.md` under `## Court Preferences`
+- `docx_writer.py` reads from SOUL court preferences instead of hardcoded values
+- This eliminates the need for a developer-maintained court YAML library — the lawyer who practises at GBN CJM defines GBN CJM conventions
+- Scales to any court globally, any jurisdiction, any judge preference
+
+*Pivot 2 — RAG over lawyer's reference documents for structure intelligence:*
+- New command: `lex add-reference <file.docx> --type s138_complaint`
+- Reference documents are chunked, embedded, stored in Qdrant with metadata `{doc_type, court, year}`
+- `nodes/retrieve.py` queries this reference store first: "find me a past S.138 complaint filed in GBN CJM" → retrieves structure/format of that filing as context
+- LLM mirrors section ordering, heading styles, exhibit labeling, prayer phrasing from the lawyer's own filed documents
+- Skills can declare `reference_collection: s138_complaints` in frontmatter; loader auto-fetches top 2 matching filings at draft time
+- This makes the pleading schema system self-building: the lawyer uploads one good past filing; the system learns from it
+- No developer-written template needed for any document type — the lawyer teaches the system via their own work
+
+**Output of Phase 0:** `lex draft "S.138 complaint"` produces a filing-ready packet:
+```
+output/
+  complaint.docx          ← court header, formal cause title, 14 paras, EX-CW labels, prayer
+  affidavit_evidence.docx ← 13 sworn paras, first-person, by complainant
+  witness_list.docx       ← CW-1 + bank officials
+  list_of_documents.docx  ← exhibit register with EX-CW1/A labels
+  lawyer_notes.docx       ← Plain English Summary + Risk Assessment (SEPARATE, not filed)
+```
+
+**Generate analysis documents first (in `analysis/`):**
+These are the specification documents that drive implementation. Create them before writing any code:
+`draft_pipeline.md` → `draft_delta.md` → `draft_quality_gaps.md` → `pleading_blueprints.md` → `court_draft_architecture.md` → `formatting_engine.md` → `priority_roadmap.md`
+
+---
+
 ### Phase 1: Stabilize and Reconcile
 
 Objective: make current claims true.
