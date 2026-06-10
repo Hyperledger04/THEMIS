@@ -54,6 +54,13 @@ class LexConfig(BaseSettings):
     # Layer 2 (Anthropic cache_control) cuts server-side input token cost ~75% on the same session.
     enable_prompt_caching: bool = Field(True, validation_alias=AliasChoices("LEX_ENABLE_CACHING", "enable_prompt_caching"))
 
+    # Skill router — uses a cheap fast model for routing decisions (not drafting).
+    # Change via LEX_SKILL_ROUTER_MODEL env var. Any LiteLLM-compatible model string.
+    skill_router_model: str = Field(
+        "openai/gpt-4.1-mini",
+        validation_alias=AliasChoices("LEX_SKILL_ROUTER_MODEL", "skill_router_model"),
+    )
+
     # ----------------------------------------------------------------
     # Paths — all under ~/.lexagent by default
     # WHY: ~/.lexagent keeps lawyer data out of the project directory,

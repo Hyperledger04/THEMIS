@@ -47,6 +47,16 @@ class LexState(TypedDict):
     notice_date: Optional[str]          # Date legal notice was sent (ISO or free-text)
     cheque_amount: Optional[str]        # Cheque amount in figures (drives prayer_fine_amount)
 
+    # --- Exhibit registry (Phase: court-ready drafts) ---
+    # WHY: Built during intake before any LLM call so that complaint body,
+    # affidavit, and list-of-documents all share the same exhibit labels.
+    # {"invoice": "EX-CW1/A", "cheque": "EX-CW1/B", ...}
+    exhibit_registry: Optional[dict]
+
+    # --- Affidavit sub-document (Phase: court-ready drafts) ---
+    affidavit_output: Optional[str]     # Full affidavit text (12-14 first-person paragraphs)
+    affidavit_path: Optional[str]       # Path to affidavit_evidence.docx
+
     # --- Research (Phase 4) ---
     research_only: Optional[bool]             # If True, graph stops after research node (no draft)
     research_findings: Optional[List[dict]]   # [{case_name, citation, relevance, url, source}]
@@ -109,6 +119,12 @@ class LexState(TypedDict):
     # --- Meta ---
     lawyer_soul: Optional[dict]               # Loaded from ~/.lexagent/SOUL.md (Phase 2)
     active_skill: Optional[str]               # Which skill.md content is active (Phase 3)
+
+    # Dynamic skill router (Phase: dynamic-skill-router)
+    # forced_skill_names: set by --skill CLI flag or /skill Telegram command before graph runs.
+    # selected_skill_names: names actually loaded by skill_router node (audit/debug).
+    forced_skill_names: Optional[List[str]]
+    selected_skill_names: Optional[List[str]]
     active_agent: Optional[dict]              # Loaded agent persona (from lex agent system or @mention)
     error: Optional[str]                      # Any error — nodes catch and set this, never raise
     next_node: Optional[str]                  # For explicit routing decisions
