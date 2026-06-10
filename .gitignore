@@ -38,3 +38,9 @@ htmlcov/
 
 # LexAgent runtime data (lawyer's private data — never commit)
 ~/.lexagent/
+
+# Generated outputs and reference documents
+graphify-out/
+Sample drafts/
+*.docx
+.qwen/
