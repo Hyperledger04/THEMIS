@@ -1,5 +1,6 @@
 ---
 name: legal_contract
+description: Contract drafting or review — clauses, indemnities, representations, governing law, dispute resolution.
 trigger_keywords: [contract, agreement, MOU, NDA, deed, lease, service agreement, employment agreement, vendor agreement, shareholder agreement, partnership deed, joint venture]
 matter_types: [contract_review, agreement_drafting, mou, nda, deed, lease_agreement, service_agreement, employment_contract]
 jurisdiction: [India - general]

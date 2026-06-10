@@ -1,5 +1,6 @@
 ---
 name: civil_litigation
+description: Civil plaint, injunction application, or general civil suit — CPC structure, valuation, court fee.
 trigger_keywords: [plaint, written statement, injunction, civil suit, CPC, specific performance, recovery, execution petition, decree]
 matter_types: [civil_suit, injunction_application, execution_petition, written_statement, appeal, plaint]
 jurisdiction: [Indian courts - all]

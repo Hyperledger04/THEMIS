@@ -194,6 +194,7 @@ def _parse_frontmatter(content: str) -> dict:
 
     return {
         "name": str(meta.get("name", "")),
+        "description": str(meta.get("description", "")),
         "trigger_keywords": _as_list(meta.get("trigger_keywords", [])),
         "matter_types": _as_list(meta.get("matter_types", [])),
         "body": body,

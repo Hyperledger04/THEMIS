@@ -1,5 +1,6 @@
 ---
 name: legal_notice
+description: Legal notice under CPC or contract — demand details, statutory deadline, cause of action facts.
 trigger_keywords: [legal notice, demand notice, notice to pay, notice before suit, pre-suit notice, statutory notice, S.80 notice, section 80]
 matter_types: [legal_notice, demand_notice, pre_suit_notice, statutory_notice]
 jurisdiction: [Indian courts - all]

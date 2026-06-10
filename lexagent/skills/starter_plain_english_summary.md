@@ -1,5 +1,6 @@
 ---
 name: starter_plain_english_summary
+description: Supporting skill — plain English summary for client communication after court filing.
 ---
 
 # Starter Plain English Summary Skill

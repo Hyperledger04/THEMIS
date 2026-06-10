@@ -1,5 +1,6 @@
 ---
 name: starter_argument_pattern
+description: Supporting skill — structured legal argument patterns (IRAC, proposition-authority-application).
 ---
 
 # Starter Argument Pattern Skill

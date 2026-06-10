@@ -1,5 +1,6 @@
 ---
 name: s138_complaint
+description: Criminal complaint for cheque dishonour under S.138 NI Act — S.141 liability, exhibit registry, affidavit.
 trigger_keywords: [138 complaint, s138 complaint, s.138, ni act complaint, cheque dishonour complaint, cheque bounce complaint, negotiable instruments complaint, dishonoured cheque, cheque return, section 138]
 matter_types: [s138_complaint, s138, cheque_dishonour]
 jurisdiction: [Indian criminal courts — CJM / JMFC]

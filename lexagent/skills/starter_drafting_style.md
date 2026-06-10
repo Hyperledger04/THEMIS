@@ -1,5 +1,6 @@
 ---
 name: starter_drafting_style
+description: Supporting skill — formal Indian court drafting style, sentence structure, citation formatting.
 ---
 
 # Starter Drafting Style Skill
