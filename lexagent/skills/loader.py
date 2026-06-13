@@ -5,11 +5,21 @@
 #   Bundled (lexagent/skills/)    — ships with the package, versioned in git
 #   User (~/.lexagent/skills/)    — lawyer-editable without touching code
 #   User skills with the same `name` as a bundled skill win (override).
+#
+# WHY three skill source formats (all produce the same dict shape):
+#   1. Flat .md file   — original format; single file with YAML frontmatter
+#   2. Skill directory — <name>/manifest.yaml + SKILL.md + references/*.md +
+#                        learnings.md; human-editable source format
+#   3. .skill ZIP      — packaged distribution format; built from a skill
+#                        directory via build_skill.py; same internal layout as
+#                        the directory format but portable as one file
 
 from __future__ import annotations
 
+import io
 import json
 import re
+import zipfile
 from pathlib import Path
 from typing import NamedTuple, Optional
 
@@ -286,15 +296,132 @@ def _load_by_name(skill_name: str, bundled: Path, user: Path) -> str | None:
 
 
 def _skills_from_dir(directory: Path) -> list[dict]:
-    """Return parsed skill dicts for every .md file in directory."""
+    """
+    Return parsed skill dicts from every skill source found in directory.
+
+    Three source formats are recognised (processed in order; all produce the
+    same dict shape so the rest of the loader is unaware of the difference):
+      1. *.md files          — flat single-file skills with YAML frontmatter
+      2. *.skill ZIP files   — packaged skills built by build_skill.py
+      3. sub-directories     — un-packaged source form (must have manifest.yaml)
+    """
     if not directory.exists() or not directory.is_dir():
         return []
     skills = []
     for md_file in directory.glob("*.md"):
         content = md_file.read_text(encoding="utf-8")
-        parsed = _parse_frontmatter(content)
-        skills.append(parsed)
+        skills.append(_parse_frontmatter(content))
+    for skill_file in directory.glob("*.skill"):
+        parsed = _parse_skill_package(skill_file)
+        if parsed:
+            skills.append(parsed)
+    for subdir in directory.iterdir():
+        if subdir.is_dir() and (subdir / "manifest.yaml").exists():
+            parsed = _parse_skill_directory(subdir)
+            if parsed:
+                skills.append(parsed)
     return skills
+
+
+def _parse_skill_package(path: Path) -> dict | None:
+    """
+    Read a .skill ZIP archive and return a skill dict.
+
+    Expected ZIP layout:
+      manifest.yaml       — YAML with name, description, trigger_keywords,
+                            matter_types, min_inference_tier
+      SKILL.md            — main instruction body
+      references/*.md     — appended to body under a ## References section
+      learnings.md        — appended as a ## Standing Rules section
+
+    WHY references are concatenated into body:
+      The rest of the loader only passes body to the LLM prompt. Concatenating
+      here keeps all downstream code unchanged while giving the LLM full
+      context from reference files.
+    """
+    try:
+        with zipfile.ZipFile(path, "r") as zf:
+            names = zf.namelist()
+
+            raw_manifest = zf.read("manifest.yaml").decode("utf-8")
+            meta = yaml.safe_load(raw_manifest) or {}
+
+            skill_md = zf.read("SKILL.md").decode("utf-8") if "SKILL.md" in names else ""
+            body_parts = [skill_md.strip()]
+
+            ref_files = sorted(n for n in names if n.startswith("references/") and n.endswith(".md"))
+            if ref_files:
+                body_parts.append("## References")
+                for ref in ref_files:
+                    ref_content = zf.read(ref).decode("utf-8").strip()
+                    ref_name = Path(ref).stem.replace("-", " ").replace("_", " ").title()
+                    body_parts.append(f"### {ref_name}\n{ref_content}")
+
+            if "learnings.md" in names:
+                learnings = zf.read("learnings.md").decode("utf-8").strip()
+                body_parts.append(f"## Standing Rules\n{learnings}")
+
+        return {
+            "name": str(meta.get("name", path.stem)),
+            "description": str(meta.get("description", "")),
+            "trigger_keywords": _as_list(meta.get("trigger_keywords", [])),
+            "matter_types": _as_list(meta.get("matter_types", [])),
+            "body": "\n\n".join(body_parts),
+            "min_tier": int(meta.get("min_inference_tier", 4)),
+        }
+    except Exception:
+        return None
+
+
+def _parse_skill_directory(path: Path) -> dict | None:
+    """
+    Read a skill source directory and return a skill dict.
+
+    Expected layout:
+      manifest.yaml
+      SKILL.md
+      references/*.md   (optional)
+      learnings.md      (optional)
+
+    WHY support directory form in addition to .skill ZIPs:
+      During development, lawyers and developers edit skill files directly.
+      Requiring a build step before testing would slow iteration. The loader
+      reads directories at runtime; build_skill.py is only needed for
+      distribution.
+    """
+    try:
+        raw_manifest = (path / "manifest.yaml").read_text(encoding="utf-8")
+        meta = yaml.safe_load(raw_manifest) or {}
+
+        skill_md_path = path / "SKILL.md"
+        skill_md = skill_md_path.read_text(encoding="utf-8").strip() if skill_md_path.exists() else ""
+        body_parts = [skill_md]
+
+        refs_dir = path / "references"
+        if refs_dir.is_dir():
+            ref_files = sorted(refs_dir.glob("*.md"))
+            if ref_files:
+                body_parts.append("## References")
+                for ref in ref_files:
+                    ref_content = ref.read_text(encoding="utf-8").strip()
+                    ref_name = ref.stem.replace("-", " ").replace("_", " ").title()
+                    body_parts.append(f"### {ref_name}\n{ref_content}")
+
+        learnings_path = path / "learnings.md"
+        if learnings_path.exists():
+            learnings = learnings_path.read_text(encoding="utf-8").strip()
+            body_parts.append(f"## Standing Rules\n{learnings}")
+
+        return {
+            "name": str(meta.get("name", path.name)),
+            "description": str(meta.get("description", "")),
+            "trigger_keywords": _as_list(meta.get("trigger_keywords", [])),
+            "matter_types": _as_list(meta.get("matter_types", [])),
+            "body": "\n\n".join(part for part in body_parts if part),
+            "min_tier": int(meta.get("min_inference_tier", 4)),
+        }
+    except Exception:
+        return None
 
 
 def _parse_frontmatter(content: str) -> dict:

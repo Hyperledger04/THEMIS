@@ -1,0 +1,30 @@
+name: indian_doc_formatter
+description: >
+  Reformats any input (.docx, .pdf, or raw text) into a ready-to-use Word
+  document following Indian legal conventions. Preserves substantive content
+  verbatim — normalises structure, styling, numbering, and presentation only.
+trigger_keywords:
+  - format
+  - reformat
+  - formatting
+  - word document
+  - docx
+  - indian legal format
+  - legal notice format
+  - pleading format
+  - contract format
+  - agreement format
+  - court document
+  - petition format
+matter_types:
+  - document_formatting
+  - legal_notice
+  - pleading
+  - petition
+  - contract
+  - agreement
+  - opinion
+  - memorandum
+min_inference_tier: 3
+version: "1.0.0"
+author: LexAgent
