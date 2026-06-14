@@ -152,3 +152,9 @@ class LexState(TypedDict):
     # --- Redline (doc-haus Feature 1) ---
     redline_source_path: Optional[str]   # original .docx to diff against
     redline_output_path: Optional[str]   # path written by review node
+
+    # --- Chamber review (doc-haus Feature 2) ---
+    chamber_enabled: Optional[bool]      # activated by --chamber flag or contract_review
+    chamber_issues: Optional[str]        # Reviewer LLM output
+    chamber_pushback: Optional[str]      # Challenger LLM output
+    chamber_review: Optional[str]        # Summarizer final review

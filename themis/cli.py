@@ -111,6 +111,10 @@ def draft(
         None, "--redline", "-R",
         help="Path to original .docx to produce tracked-changes redline against new draft.",
     ),
+    chamber: bool = typer.Option(
+        False, "--chamber", "-C",
+        help="Enable adversarial multi-agent review chamber before final output.",
+    ),
 ) -> None:
     """
     Draft a legal document from a matter brief.
@@ -241,7 +245,7 @@ def draft(
 
     console.print()
 
-    asyncio.run(_run_draft(brief, session_matter_id, cfg, prior_state, output_path, agent_config, list(skill) if skill else None, redline_source_path=redline))
+    asyncio.run(_run_draft(brief, session_matter_id, cfg, prior_state, output_path, agent_config, list(skill) if skill else None, redline_source_path=redline, chamber_enabled=chamber))
 
 
 # ---------------------------------------------------------------------------
@@ -348,6 +352,7 @@ async def _run_draft(
     agent_config: Optional[dict] = None,
     forced_skill_names: Optional[List[str]] = None,
     redline_source_path: Optional[str] = None,
+    chamber_enabled: bool = False,
 ) -> None:
     from themis.nodes.draft import register_draft_stream, unregister_draft_stream
 
@@ -366,8 +371,9 @@ async def _run_draft(
         state["active_agent"] = agent_config
         state["forced_skill_names"] = forced_skill_names  # type: ignore[typeddict-unknown-key]
         state["redline_source_path"] = redline_source_path  # type: ignore[typeddict-unknown-key]
+        state["chamber_enabled"] = chamber_enabled  # type: ignore[typeddict-unknown-key]
     else:
-        state = _blank_state(initial_brief, matter_id, output_path, agent_config, forced_skill_names, redline_source_path)
+        state = _blank_state(initial_brief, matter_id, output_path, agent_config, forced_skill_names, redline_source_path, chamber_enabled=chamber_enabled)
 
     max_intake_rounds = 5
     intake_round = 0
@@ -534,6 +540,7 @@ def _blank_state(
     agent_config: Optional[dict] = None,
     forced_skill_names: Optional[List[str]] = None,
     redline_source_path: Optional[str] = None,
+    chamber_enabled: bool = False,
 ) -> LexState:
     return {  # type: ignore[return-value]
         "user_input": brief,
@@ -569,6 +576,7 @@ def _blank_state(
         "docx_path": output_path,
         "forced_skill_names": forced_skill_names,
         "redline_source_path": redline_source_path,
+        "chamber_enabled": chamber_enabled or None,
     }
 
 
