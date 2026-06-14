@@ -148,3 +148,7 @@ class LexState(TypedDict):
     # so mid-graph questions can be spoken back to the right caller.
     voice_session_id: Optional[str]           # Twilio Call SID or WebSocket UUID
     voice_channel: Optional[str]              # "twilio" | "websocket"
+
+    # --- Redline (doc-haus Feature 1) ---
+    redline_source_path: Optional[str]   # original .docx to diff against
+    redline_output_path: Optional[str]   # path written by review node

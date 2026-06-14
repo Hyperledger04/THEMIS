@@ -107,6 +107,10 @@ def draft(
         "-S",
         help="Force-load a skill by name (repeatable: --skill s138_complaint --skill bail_application)",
     ),
+    redline: Optional[str] = typer.Option(
+        None, "--redline", "-R",
+        help="Path to original .docx to produce tracked-changes redline against new draft.",
+    ),
 ) -> None:
     """
     Draft a legal document from a matter brief.
@@ -237,7 +241,7 @@ def draft(
 
     console.print()
 
-    asyncio.run(_run_draft(brief, session_matter_id, cfg, prior_state, output_path, agent_config, list(skill) if skill else None))
+    asyncio.run(_run_draft(brief, session_matter_id, cfg, prior_state, output_path, agent_config, list(skill) if skill else None, redline_source_path=redline))
 
 
 # ---------------------------------------------------------------------------
@@ -343,6 +347,7 @@ async def _run_draft(
     output_path: Optional[str] = None,
     agent_config: Optional[dict] = None,
     forced_skill_names: Optional[List[str]] = None,
+    redline_source_path: Optional[str] = None,
 ) -> None:
     from themis.nodes.draft import register_draft_stream, unregister_draft_stream
 
@@ -360,8 +365,9 @@ async def _run_draft(
         state["docx_path"] = output_path
         state["active_agent"] = agent_config
         state["forced_skill_names"] = forced_skill_names  # type: ignore[typeddict-unknown-key]
+        state["redline_source_path"] = redline_source_path  # type: ignore[typeddict-unknown-key]
     else:
-        state = _blank_state(initial_brief, matter_id, output_path, agent_config, forced_skill_names)
+        state = _blank_state(initial_brief, matter_id, output_path, agent_config, forced_skill_names, redline_source_path)
 
     max_intake_rounds = 5
     intake_round = 0
@@ -527,6 +533,7 @@ def _blank_state(
     output_path: Optional[str] = None,
     agent_config: Optional[dict] = None,
     forced_skill_names: Optional[List[str]] = None,
+    redline_source_path: Optional[str] = None,
 ) -> LexState:
     return {  # type: ignore[return-value]
         "user_input": brief,
@@ -561,6 +568,7 @@ def _blank_state(
         "retrieval_chunks": None,
         "docx_path": output_path,
         "forced_skill_names": forced_skill_names,
+        "redline_source_path": redline_source_path,
     }
 
 
