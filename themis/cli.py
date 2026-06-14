@@ -2471,5 +2471,51 @@ def help_cmd() -> None:
     console.print()
 
 
+@app.command("grid")
+def grid_cmd(
+    matter_id: str = typer.Argument(..., help="Matter ID to run grid against."),
+    questions: Optional[List[str]] = typer.Option(
+        None, "--questions", "-q",
+        help="Question to run across all documents. Repeat for multiple.",
+    ),
+    output_csv: Optional[str] = typer.Option(None, "--csv", help="Write results to CSV file."),
+) -> None:
+    """Run a question grid across all documents in a matter."""
+    import csv as csv_mod
+    from themis.nodes.grid import run as grid_run
+
+    if not questions:
+        console.print("[red]At least one --questions/-q is required.[/red]")
+        raise typer.Exit(1)
+
+    result = asyncio.run(grid_run({
+        "matter_id": matter_id,
+        "grid_questions": questions,
+        "messages": [],
+        "error": None,
+    }))
+    grid = result.get("grid_results") or {}
+    if not grid:
+        console.print("[yellow]No results — check that documents exist in the matter docs folder.[/yellow]")
+        raise typer.Exit(1)
+
+    docs = sorted({d for row in grid.values() for d in row})
+    table = Table(show_header=True, header_style="bold cyan")
+    table.add_column("Question", style="bold", max_width=40)
+    for doc in docs:
+        table.add_column(doc, max_width=30)
+    for question, row in grid.items():
+        table.add_row(question, *[row.get(d, "") for d in docs])
+    console.print(table)
+
+    if output_csv:
+        with open(output_csv, "w", newline="") as f:
+            w = csv_mod.writer(f)
+            w.writerow(["Question"] + docs)
+            for question, row in grid.items():
+                w.writerow([question] + [row.get(d, "") for d in docs])
+        console.print(f"[green]Saved to {output_csv}[/green]")
+
+
 if __name__ == "__main__":
     app()

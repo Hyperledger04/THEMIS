@@ -158,3 +158,7 @@ class LexState(TypedDict):
     chamber_issues: Optional[str]        # Reviewer LLM output
     chamber_pushback: Optional[str]      # Challenger LLM output
     chamber_review: Optional[str]        # Summarizer final review
+
+    # --- Grid analysis (doc-haus Feature 3) ---
+    grid_questions: Optional[List[str]]  # questions to run across all matter docs
+    grid_results: Optional[dict]         # {question: {doc_name: answer}}
