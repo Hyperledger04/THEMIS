@@ -1,7 +1,7 @@
-"""Tests for JWT, refresh token, and API key helpers — lexagent/security/tokens.py."""
+"""Tests for JWT, refresh token, and API key helpers — themis/security/tokens.py."""
 import time
 import pytest
-from lexagent.security.tokens import (
+from themis.security.tokens import (
     decode_access_token,
     generate_access_token,
     generate_api_key,

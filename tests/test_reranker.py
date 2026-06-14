@@ -1,11 +1,11 @@
-"""Tests for lexagent/tools/reranker.py"""
+"""Tests for themis/tools/reranker.py"""
 import pytest
 from unittest.mock import AsyncMock, patch
 
-from lexagent.config import LexConfig
-from lexagent.tools.chunker import Chunk
-from lexagent.tools.retriever import RetrievalResult
-from lexagent.tools.reranker import LLMReranker, _parse_scores
+from themis.config import LexConfig
+from themis.tools.chunker import Chunk
+from themis.tools.retriever import RetrievalResult
+from themis.tools.reranker import LLMReranker, _parse_scores
 
 
 def _make_result(text: str, score: float = 0.5) -> RetrievalResult:
@@ -67,7 +67,7 @@ async def test_rerank_sorts_by_score():
     ]
     cfg = LexConfig()
     reranker = LLMReranker(cfg=cfg, top_k=3)
-    with patch("lexagent.nodes._llm.call_llm", new_callable=AsyncMock) as mock_llm:
+    with patch("themis.nodes._llm.call_llm", new_callable=AsyncMock) as mock_llm:
         mock_llm.return_value = {"content": "[2, 9, 4]", "tool_calls": None}
         reranked = await reranker.rerank("injunction property dispute", results)
     assert reranked[0].child.chunk_text == "High relevance passage about injunction"
@@ -78,7 +78,7 @@ async def test_rerank_respects_top_k():
     results = [_make_result(f"Passage {i}") for i in range(6)]
     cfg = LexConfig()
     reranker = LLMReranker(cfg=cfg, top_k=3)
-    with patch("lexagent.nodes._llm.call_llm", new_callable=AsyncMock) as mock_llm:
+    with patch("themis.nodes._llm.call_llm", new_callable=AsyncMock) as mock_llm:
         mock_llm.return_value = {"content": "[1, 2, 3, 4, 5, 6]", "tool_calls": None}
         reranked = await reranker.rerank("query", results)
     assert len(reranked) <= 3
@@ -89,7 +89,7 @@ async def test_rerank_llm_failure_returns_original_order():
     results = [_make_result(f"Passage {i}", score=float(i)) for i in range(3)]
     cfg = LexConfig()
     reranker = LLMReranker(cfg=cfg, top_k=3)
-    with patch("lexagent.nodes._llm.call_llm", new_callable=AsyncMock) as mock_llm:
+    with patch("themis.nodes._llm.call_llm", new_callable=AsyncMock) as mock_llm:
         mock_llm.side_effect = RuntimeError("LLM down")
         reranked = await reranker.rerank("query", results)
     assert len(reranked) <= 3
@@ -102,8 +102,8 @@ async def test_rerank_llm_failure_returns_original_order():
 
 @pytest.mark.asyncio
 async def test_retrieve_reranked_no_reranker():
-    from lexagent.tools.retriever import HybridRetriever
-    from lexagent.tools.chunker import chunk_text
+    from themis.tools.retriever import HybridRetriever
+    from themis.tools.chunker import chunk_text
 
     findings = [{"citation": "AIR 1978 SC 597", "full_text": "Section 3 Injunction.\n" + "Content " * 50}]
     retriever = HybridRetriever.from_findings(findings)

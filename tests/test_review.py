@@ -1,6 +1,6 @@
-"""Tests for lexagent/nodes/review.py"""
+"""Tests for themis/nodes/review.py"""
 import pytest
-from lexagent.nodes.review import run, _word_count, _jurisdiction_limit
+from themis.nodes.review import run, _word_count, _jurisdiction_limit
 
 
 # -----------------------------------------------------------------------

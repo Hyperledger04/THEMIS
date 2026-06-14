@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from lexagent.skills.loader import (
+from themis.skills.loader import (
     _parse_frontmatter,
     _string_match_skill_name,
     build_skills_manifest,
@@ -116,7 +116,7 @@ async def test_route_skills_returns_selected_from_llm():
         ]
     )
     cfg = SimpleNamespace(skill_router_model="openai/gpt-4.1-mini", openai_api_key="test")
-    with patch("lexagent.skills.loader.litellm.acompletion", new=AsyncMock(return_value=mock_response)):
+    with patch("themis.skills.loader.litellm.acompletion", new=AsyncMock(return_value=mock_response)):
         result = await route_skills("S.138 cheque case", manifest, cfg)
     assert result["selected"] == ["s138_complaint"]
     assert result["unmatched"] == []
@@ -135,7 +135,7 @@ async def test_route_skills_filters_nonexistent_skills():
         ]
     )
     cfg = SimpleNamespace(skill_router_model="openai/gpt-4.1-mini", openai_api_key="test")
-    with patch("lexagent.skills.loader.litellm.acompletion", new=AsyncMock(return_value=mock_response)):
+    with patch("themis.skills.loader.litellm.acompletion", new=AsyncMock(return_value=mock_response)):
         result = await route_skills("arbitration matter", manifest, cfg)
     assert "arbitration_petition" not in result["selected"]
 
@@ -144,6 +144,108 @@ async def test_route_skills_filters_nonexistent_skills():
 async def test_route_skills_returns_empty_on_exception():
     manifest = {"s138_complaint": "S.138 cheque."}
     cfg = SimpleNamespace(skill_router_model="openai/gpt-4.1-mini", openai_api_key="test")
-    with patch("lexagent.skills.loader.litellm.acompletion", side_effect=Exception("API error")):
+    with patch("themis.skills.loader.litellm.acompletion", side_effect=Exception("API error")):
         result = await route_skills("any matter", manifest, cfg)
     assert result == {"selected": [], "unmatched": []}
+
+
+# ── skill_router node ────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_skill_router_node_loads_skill_into_state(tmp_path):
+    """Router node should write active_skill and selected_skill_names to state."""
+    skill_file = tmp_path / "s138_complaint.md"
+    skill_file.write_text(
+        "---\n"
+        "name: s138_complaint\n"
+        "description: S.138 cheque dishonour complaint.\n"
+        "trigger_keywords: [cheque, 138, ni act, dishonour]\n"
+        "matter_types: [s138_complaint]\n"
+        "---\n\n# S138 Skill Body\n"
+    )
+    user_dir = tmp_path / "user"
+    user_dir.mkdir()
+
+    from themis.nodes.skill_router import run as router_run
+
+    state = {
+        "user_input": "cheque dishonour case against ABC Ltd",
+        "matter_type": "s138_complaint",
+        "intake_complete": True,
+        "forced_skill_names": None,
+        "messages": [],
+    }
+
+    mock_route_result = {"selected": ["s138_complaint"], "unmatched": []}
+
+    with (
+        patch("themis.nodes.skill_router.BUNDLED_SKILLS_DIR", tmp_path),
+        patch("themis.nodes.skill_router.route_skills", new=AsyncMock(return_value=mock_route_result)),
+    ):
+        result = await router_run(state)
+
+    assert "active_skill" in result
+    assert "S138 Skill Body" in result["active_skill"]
+    assert result["selected_skill_names"] == ["s138_complaint"]
+
+
+@pytest.mark.asyncio
+async def test_skill_router_node_unions_forced_with_llm(tmp_path):
+    """forced_skill_names should be added even if LLM picks nothing."""
+    skill_a = tmp_path / "s138_complaint.md"
+    skill_a.write_text(
+        "---\nname: s138_complaint\ndescription: S138.\ntrigger_keywords: [cheque]\nmatter_types: [s138_complaint]\n---\n\n# S138\n"
+    )
+    skill_b = tmp_path / "bail_application.md"
+    skill_b.write_text(
+        "---\nname: bail_application\ndescription: Bail.\ntrigger_keywords: [bail]\nmatter_types: [bail_application]\n---\n\n# Bail\n"
+    )
+    user_dir = tmp_path / "user"
+    user_dir.mkdir()
+
+    from themis.nodes.skill_router import run as router_run
+
+    state = {
+        "user_input": "cheque dishonour and bail needed",
+        "matter_type": "s138_complaint",
+        "intake_complete": True,
+        "forced_skill_names": ["bail_application"],
+        "messages": [],
+    }
+
+    mock_route_result = {"selected": ["s138_complaint"], "unmatched": []}
+
+    with (
+        patch("themis.nodes.skill_router.BUNDLED_SKILLS_DIR", tmp_path),
+        patch("themis.nodes.skill_router.route_skills", new=AsyncMock(return_value=mock_route_result)),
+    ):
+        result = await router_run(state)
+
+    assert result["selected_skill_names"] is not None
+    assert "bail_application" in result["selected_skill_names"]
+    assert "s138_complaint" in result["selected_skill_names"]
+
+
+@pytest.mark.asyncio
+async def test_skill_router_node_no_error_on_llm_failure(tmp_path):
+    """Node must not raise even if LLM call fails — graceful degradation."""
+    user_dir = tmp_path / "user"
+    user_dir.mkdir()
+
+    from themis.nodes.skill_router import run as router_run
+
+    state = {
+        "user_input": "some matter",
+        "matter_type": "writ_petition",
+        "intake_complete": True,
+        "forced_skill_names": None,
+        "messages": [],
+    }
+
+    with (
+        patch("themis.nodes.skill_router.BUNDLED_SKILLS_DIR", tmp_path),
+        patch("themis.nodes.skill_router.route_skills", new=AsyncMock(side_effect=Exception("LLM down"))),
+    ):
+        result = await router_run(state)
+
+    assert result.get("error") is None

@@ -1,8 +1,8 @@
-"""Tests for lexagent/runtime/jobs.py — living-agent job handlers.
+"""Tests for themis/runtime/jobs.py — living-agent job handlers.
 
 All tests run without Postgres or a real LLM by patching at two boundaries:
-  - lexagent.runtime.jobs._get_postgres_url / _get_workspace_repo
-  - lexagent.providers.router.ModelRouter.generate
+  - themis.runtime.jobs._get_postgres_url / _get_workspace_repo
+  - themis.providers.router.ModelRouter.generate
 """
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from lexagent.runtime.models import AgentJob
+from themis.runtime.models import AgentJob
 
 
 # ---------------------------------------------------------------------------
@@ -38,7 +38,7 @@ def _make_runtime_repo() -> MagicMock:
 def _make_ws_repo(matter=None, facts=None, issues=None,
                   deadlines=None, drafts=None, documents=None,
                   parties=None, authorities=None, chronology=None) -> MagicMock:
-    from lexagent.workspace.models import Matter
+    from themis.workspace.models import Matter
     ws = MagicMock()
     ws.get_matter = MagicMock(return_value=matter or Matter(
         matter_id="M-TEST", firm_id="firm_a",
@@ -64,10 +64,10 @@ class TestLlmCall:
     @pytest.mark.asyncio
     async def test_uses_model_router(self):
         """_llm_call must call ModelRouter.generate — not call_llm from nodes."""
-        from lexagent.runtime.jobs import _llm_call
+        from themis.runtime.jobs import _llm_call
 
         with patch(
-            "lexagent.providers.router.ModelRouter.generate",
+            "themis.providers.router.ModelRouter.generate",
             new_callable=AsyncMock,
             return_value={"content": "test response", "parsed": None, "raw": None, "model": "x"},
         ) as mock_generate:
@@ -84,10 +84,10 @@ class TestLlmCall:
     @pytest.mark.asyncio
     async def test_returns_content_string(self):
         """_llm_call must return a plain string, not a dict."""
-        from lexagent.runtime.jobs import _llm_call
+        from themis.runtime.jobs import _llm_call
 
         with patch(
-            "lexagent.providers.router.ModelRouter.generate",
+            "themis.providers.router.ModelRouter.generate",
             new_callable=AsyncMock,
             return_value={"content": "The cheque was dishonoured.", "parsed": None, "raw": None, "model": "x"},
         ):
@@ -105,7 +105,7 @@ class TestProcessUploadedDocuments:
     @pytest.mark.asyncio
     async def test_enqueues_extract_job(self, tmp_path):
         """After ingestion, the handler must enqueue extract_facts_and_issues."""
-        from lexagent.runtime.jobs import handle_process_uploaded_documents
+        from themis.runtime.jobs import handle_process_uploaded_documents
 
         f = tmp_path / "brief.txt"
         f.write_text("The cheque was dishonoured on 14 March 2026.")
@@ -117,8 +117,8 @@ class TestProcessUploadedDocuments:
         runtime_repo = _make_runtime_repo()
         ws_repo = _make_ws_repo()
 
-        from lexagent.ingestion.documents import IngestedDocument, PageText
-        from lexagent.workspace.models import DocumentRecord
+        from themis.ingestion.documents import IngestedDocument, PageText
+        from themis.workspace.models import DocumentRecord
         fake_result = IngestedDocument(
             record=DocumentRecord(
                 matter_id="M-TEST", firm_id="firm_a",
@@ -128,9 +128,9 @@ class TestProcessUploadedDocuments:
             anchor_count=2,
         )
 
-        with patch("lexagent.runtime.jobs._get_postgres_url", return_value="postgres://test"), \
-             patch("lexagent.runtime.jobs._get_workspace_repo", return_value=ws_repo), \
-             patch("lexagent.ingestion.documents.ingest_file", return_value=fake_result):
+        with patch("themis.runtime.jobs._get_postgres_url", return_value="postgres://test"), \
+             patch("themis.runtime.jobs._get_workspace_repo", return_value=ws_repo), \
+             patch("themis.ingestion.documents.ingest_file", return_value=fake_result):
             await handle_process_uploaded_documents(job, runtime_repo)
 
         runtime_repo.create_job.assert_called_once()
@@ -141,7 +141,7 @@ class TestProcessUploadedDocuments:
     @pytest.mark.asyncio
     async def test_missing_file_path_raises(self):
         """Handler must raise ValueError when file_path is absent from payload."""
-        from lexagent.runtime.jobs import handle_process_uploaded_documents
+        from themis.runtime.jobs import handle_process_uploaded_documents
 
         job = _make_job("process_uploaded_documents", {})
         with pytest.raises(ValueError, match="file_path"):
@@ -155,8 +155,8 @@ class TestProcessUploadedDocuments:
 class TestBuildChronology:
     @pytest.mark.asyncio
     async def test_creates_chronology_artifact(self):
-        from lexagent.runtime.jobs import handle_build_chronology
-        from lexagent.workspace.models import ChronologyItem
+        from themis.runtime.jobs import handle_build_chronology
+        from themis.workspace.models import ChronologyItem
 
         items = [
             ChronologyItem(matter_id="M-TEST", date_text="14 March 2026",
@@ -166,8 +166,8 @@ class TestBuildChronology:
         runtime_repo = _make_runtime_repo()
         job = _make_job("build_chronology", {"firm_id": "firm_a"})
 
-        with patch("lexagent.runtime.jobs._get_postgres_url", return_value="postgres://test"), \
-             patch("lexagent.runtime.jobs._get_workspace_repo", return_value=ws_repo):
+        with patch("themis.runtime.jobs._get_postgres_url", return_value="postgres://test"), \
+             patch("themis.runtime.jobs._get_workspace_repo", return_value=ws_repo):
             await handle_build_chronology(job, runtime_repo)
 
         runtime_repo.create_artifact.assert_called_once()
@@ -177,14 +177,14 @@ class TestBuildChronology:
 
     @pytest.mark.asyncio
     async def test_empty_chronology_still_creates_artifact(self):
-        from lexagent.runtime.jobs import handle_build_chronology
+        from themis.runtime.jobs import handle_build_chronology
 
         ws_repo = _make_ws_repo(chronology=[])
         runtime_repo = _make_runtime_repo()
         job = _make_job("build_chronology", {"firm_id": "firm_a"})
 
-        with patch("lexagent.runtime.jobs._get_postgres_url", return_value="postgres://test"), \
-             patch("lexagent.runtime.jobs._get_workspace_repo", return_value=ws_repo):
+        with patch("themis.runtime.jobs._get_postgres_url", return_value="postgres://test"), \
+             patch("themis.runtime.jobs._get_workspace_repo", return_value=ws_repo):
             await handle_build_chronology(job, runtime_repo)
 
         runtime_repo.create_artifact.assert_called_once()
@@ -198,8 +198,8 @@ class TestBuildChronology:
 class TestDeadlineScan:
     @pytest.mark.asyncio
     async def test_creates_alert_when_deadline_due_soon(self):
-        from lexagent.runtime.jobs import handle_deadline_scan
-        from lexagent.workspace.models import Deadline
+        from themis.runtime.jobs import handle_deadline_scan
+        from themis.workspace.models import Deadline
         from datetime import date, timedelta
 
         soon = (date.today() + timedelta(days=5)).isoformat()
@@ -211,8 +211,8 @@ class TestDeadlineScan:
         runtime_repo = _make_runtime_repo()
         job = _make_job("deadline_scan", {"firm_id": "firm_a", "warning_days": 30})
 
-        with patch("lexagent.runtime.jobs._get_postgres_url", return_value="postgres://test"), \
-             patch("lexagent.runtime.jobs._get_workspace_repo", return_value=ws_repo):
+        with patch("themis.runtime.jobs._get_postgres_url", return_value="postgres://test"), \
+             patch("themis.runtime.jobs._get_workspace_repo", return_value=ws_repo):
             await handle_deadline_scan(job, runtime_repo)
 
         runtime_repo.create_artifact.assert_called_once()
@@ -222,8 +222,8 @@ class TestDeadlineScan:
 
     @pytest.mark.asyncio
     async def test_no_artifact_when_no_urgent_deadlines(self):
-        from lexagent.runtime.jobs import handle_deadline_scan
-        from lexagent.workspace.models import Deadline
+        from themis.runtime.jobs import handle_deadline_scan
+        from themis.workspace.models import Deadline
         from datetime import date, timedelta
 
         far = (date.today() + timedelta(days=120)).isoformat()
@@ -233,8 +233,8 @@ class TestDeadlineScan:
         runtime_repo = _make_runtime_repo()
         job = _make_job("deadline_scan", {"firm_id": "firm_a", "warning_days": 30})
 
-        with patch("lexagent.runtime.jobs._get_postgres_url", return_value="postgres://test"), \
-             patch("lexagent.runtime.jobs._get_workspace_repo", return_value=ws_repo):
+        with patch("themis.runtime.jobs._get_postgres_url", return_value="postgres://test"), \
+             patch("themis.runtime.jobs._get_workspace_repo", return_value=ws_repo):
             await handle_deadline_scan(job, runtime_repo)
 
         runtime_repo.create_artifact.assert_not_called()
@@ -247,15 +247,15 @@ class TestDeadlineScan:
 class TestMorningBrief:
     @pytest.mark.asyncio
     async def test_creates_morning_brief_artifact(self):
-        from lexagent.runtime.jobs import handle_morning_brief
+        from themis.runtime.jobs import handle_morning_brief
 
         ws_repo = _make_ws_repo()
         runtime_repo = _make_runtime_repo()
         job = _make_job("morning_brief", {"firm_id": "firm_a", "user_id": "lawyer_1"})
 
-        with patch("lexagent.runtime.jobs._get_postgres_url", return_value="postgres://test"), \
-             patch("lexagent.runtime.jobs._get_workspace_repo", return_value=ws_repo), \
-             patch("lexagent.runtime.jobs._llm_call", new_callable=AsyncMock,
+        with patch("themis.runtime.jobs._get_postgres_url", return_value="postgres://test"), \
+             patch("themis.runtime.jobs._get_workspace_repo", return_value=ws_repo), \
+             patch("themis.runtime.jobs._llm_call", new_callable=AsyncMock,
                    return_value="## Morning Brief\n\nPriority: File reply today."):
             await handle_morning_brief(job, runtime_repo)
 
@@ -267,14 +267,14 @@ class TestMorningBrief:
 
     @pytest.mark.asyncio
     async def test_raises_when_matter_not_found(self):
-        from lexagent.runtime.jobs import handle_morning_brief
+        from themis.runtime.jobs import handle_morning_brief
 
         ws_repo = _make_ws_repo()
         ws_repo.get_matter = MagicMock(return_value=None)
         job = _make_job("morning_brief", {"firm_id": "firm_a"})
 
-        with patch("lexagent.runtime.jobs._get_postgres_url", return_value="postgres://test"), \
-             patch("lexagent.runtime.jobs._get_workspace_repo", return_value=ws_repo):
+        with patch("themis.runtime.jobs._get_postgres_url", return_value="postgres://test"), \
+             patch("themis.runtime.jobs._get_workspace_repo", return_value=ws_repo):
             with pytest.raises(ValueError, match="not found"):
                 await handle_morning_brief(job, MagicMock())
 
@@ -286,15 +286,15 @@ class TestMorningBrief:
 class TestNextActions:
     @pytest.mark.asyncio
     async def test_creates_next_actions_artifact(self):
-        from lexagent.runtime.jobs import handle_next_actions
+        from themis.runtime.jobs import handle_next_actions
 
         ws_repo = _make_ws_repo()
         runtime_repo = _make_runtime_repo()
         job = _make_job("next_actions", {"firm_id": "firm_a"})
 
-        with patch("lexagent.runtime.jobs._get_postgres_url", return_value="postgres://test"), \
-             patch("lexagent.runtime.jobs._get_workspace_repo", return_value=ws_repo), \
-             patch("lexagent.runtime.jobs._llm_call", new_callable=AsyncMock,
+        with patch("themis.runtime.jobs._get_postgres_url", return_value="postgres://test"), \
+             patch("themis.runtime.jobs._get_workspace_repo", return_value=ws_repo), \
+             patch("themis.runtime.jobs._llm_call", new_callable=AsyncMock,
                    return_value="1. File vakalatnama\n2. Issue legal notice"):
             await handle_next_actions(job, runtime_repo)
 
@@ -311,7 +311,7 @@ class TestNextActions:
 class TestDraftNextDocument:
     @pytest.mark.asyncio
     async def test_creates_draft_and_artifact(self):
-        from lexagent.runtime.jobs import handle_draft_next_document
+        from themis.runtime.jobs import handle_draft_next_document
 
         ws_repo = _make_ws_repo()
         runtime_repo = _make_runtime_repo()
@@ -319,9 +319,9 @@ class TestDraftNextDocument:
             "firm_id": "firm_a", "doc_type": "legal_notice",
         })
 
-        with patch("lexagent.runtime.jobs._get_postgres_url", return_value="postgres://test"), \
-             patch("lexagent.runtime.jobs._get_workspace_repo", return_value=ws_repo), \
-             patch("lexagent.runtime.jobs._llm_call", new_callable=AsyncMock,
+        with patch("themis.runtime.jobs._get_postgres_url", return_value="postgres://test"), \
+             patch("themis.runtime.jobs._get_workspace_repo", return_value=ws_repo), \
+             patch("themis.runtime.jobs._llm_call", new_callable=AsyncMock,
                    return_value="LEGAL NOTICE\n\nTo: Respondent\n..."):
             await handle_draft_next_document(job, runtime_repo)
 
@@ -337,8 +337,8 @@ class TestDraftNextDocument:
 
     @pytest.mark.asyncio
     async def test_increments_version_for_existing_drafts(self):
-        from lexagent.runtime.jobs import handle_draft_next_document
-        from lexagent.workspace.models import Draft
+        from themis.runtime.jobs import handle_draft_next_document
+        from themis.workspace.models import Draft
 
         existing = [Draft(matter_id="M-TEST", doc_type="legal_notice",
                           version=1, content="old content")]
@@ -348,9 +348,9 @@ class TestDraftNextDocument:
             "firm_id": "firm_a", "doc_type": "legal_notice",
         })
 
-        with patch("lexagent.runtime.jobs._get_postgres_url", return_value="postgres://test"), \
-             patch("lexagent.runtime.jobs._get_workspace_repo", return_value=ws_repo), \
-             patch("lexagent.runtime.jobs._llm_call", new_callable=AsyncMock,
+        with patch("themis.runtime.jobs._get_postgres_url", return_value="postgres://test"), \
+             patch("themis.runtime.jobs._get_workspace_repo", return_value=ws_repo), \
+             patch("themis.runtime.jobs._llm_call", new_callable=AsyncMock,
                    return_value="REVISED LEGAL NOTICE\n..."):
             await handle_draft_next_document(job, runtime_repo)
 

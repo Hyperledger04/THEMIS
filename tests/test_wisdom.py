@@ -4,7 +4,7 @@ import pytest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from lexagent.memory.wisdom import (
+from themis.memory.wisdom import (
     _append_wisdom,
     get_relevant_wisdom,
     load_wisdom,
@@ -19,7 +19,7 @@ from lexagent.memory.wisdom import (
 def test_wisdom_path_default():
     p = wisdom_path()
     assert p.name == "wisdom.md"
-    assert "lexagent" in str(p)
+    assert "themis" in str(p)
 
 
 def test_wisdom_path_custom(tmp_path):
@@ -106,8 +106,8 @@ def test_get_relevant_wisdom_max_entries(tmp_path):
 
 @pytest.mark.asyncio
 async def test_extract_and_save_wisdom(tmp_path):
-    from lexagent.memory.wisdom import extract_and_save_wisdom
-    from lexagent.config import LexConfig
+    from themis.memory.wisdom import extract_and_save_wisdom
+    from themis.config import LexConfig
 
     state = {
         "matter_type": "legal notice",
@@ -121,7 +121,7 @@ async def test_extract_and_save_wisdom(tmp_path):
 
     yaml_output = '- matter_type: "legal notice"\n  jurisdiction: "Delhi HC"\n  note: "Section 138 NI Act — 30-day demand notice before filing complaint."\n  date: "2025-01-01"'
 
-    with patch("lexagent.nodes._llm.call_llm", new_callable=AsyncMock) as mock_call_llm:
+    with patch("themis.nodes._llm.call_llm", new_callable=AsyncMock) as mock_call_llm:
         mock_call_llm.return_value = {"content": yaml_output, "tool_calls": None}
 
         await extract_and_save_wisdom(state, cfg)  # type: ignore[arg-type]
@@ -133,8 +133,8 @@ async def test_extract_and_save_wisdom(tmp_path):
 @pytest.mark.asyncio
 async def test_extract_and_save_wisdom_no_draft():
     """Skips extraction when draft_output is absent — must not raise."""
-    from lexagent.memory.wisdom import extract_and_save_wisdom
-    from lexagent.config import LexConfig
+    from themis.memory.wisdom import extract_and_save_wisdom
+    from themis.config import LexConfig
 
     state = {"matter_type": "legal notice"}
     cfg = LexConfig()
@@ -146,8 +146,8 @@ async def test_extract_and_save_wisdom_no_draft():
 @pytest.mark.asyncio
 async def test_extract_and_save_wisdom_llm_error(tmp_path):
     """LLM failure is swallowed — wisdom file stays empty."""
-    from lexagent.memory.wisdom import extract_and_save_wisdom
-    from lexagent.config import LexConfig
+    from themis.memory.wisdom import extract_and_save_wisdom
+    from themis.config import LexConfig
 
     state = {
         "matter_type": "writ petition",
@@ -156,7 +156,7 @@ async def test_extract_and_save_wisdom_llm_error(tmp_path):
     }
     cfg = LexConfig(home_dir=str(tmp_path))
 
-    with patch("lexagent.nodes._llm.call_llm", new_callable=AsyncMock) as mock_call_llm:
+    with patch("themis.nodes._llm.call_llm", new_callable=AsyncMock) as mock_call_llm:
         mock_call_llm.side_effect = RuntimeError("API unavailable")
 
         await extract_and_save_wisdom(state, cfg)  # type: ignore[arg-type]

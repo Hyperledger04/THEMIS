@@ -1,9 +1,9 @@
-"""Tests for provider-agnostic model layer — lexagent/providers/."""
+"""Tests for provider-agnostic model layer — themis/providers/."""
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from lexagent.providers.base import ProviderProfile
-from lexagent.providers.router import ModelRouter
+from themis.providers.base import ProviderProfile
+from themis.providers.router import ModelRouter
 
 
 class TestProviderProfile:
@@ -54,7 +54,7 @@ class TestProviderProfile:
 
 class TestModelRouter:
     def _router(self, **cfg_overrides):
-        from lexagent.config import LexConfig
+        from themis.config import LexConfig
         cfg = LexConfig(
             default_model="claude-sonnet-4-6",
             model_provider="anthropic",
@@ -86,7 +86,7 @@ class TestModelRouter:
         fake_response = MagicMock()
         fake_response.choices = [fake_choice]
 
-        with patch("lexagent.providers.router._litellm") as mock_llm_fn:
+        with patch("themis.providers.router._litellm") as mock_llm_fn:
             mock_llm = MagicMock()
             mock_llm.acompletion = AsyncMock(return_value=fake_response)
             mock_llm_fn.return_value = mock_llm
@@ -104,7 +104,7 @@ class TestModelRouter:
         r = self._router()
         fake_response = {"data": [{"embedding": [0.1, 0.2, 0.3]}, {"embedding": [0.4, 0.5, 0.6]}]}
 
-        with patch("lexagent.providers.router._litellm") as mock_llm_fn:
+        with patch("themis.providers.router._litellm") as mock_llm_fn:
             mock_llm = MagicMock()
             mock_llm.aembedding = AsyncMock(return_value=fake_response)
             mock_llm_fn.return_value = mock_llm

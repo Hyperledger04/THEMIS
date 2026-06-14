@@ -1,0 +1,96 @@
+# CJM / JMFC — S.138 NI Act Criminal Complaint
+#
+# Structural rules specific to S.138 cheque dishonour complaints:
+#   - Cause of action paragraph is P0 (must state date of dishonour + demand notice)
+#   - Limitation paragraph is P0 (30-day demand notice + 15-day filing window)
+#   - S.141 block is P0 when accused is a company/partnership/proprietorship
+#   - Exhibit labels follow EX-CW1/A format (not generic ANNEXURE {n})
+#   - Section order is prescribed by Negotiable Instruments Act practice
+#
+# Formatting is inherited from generic_indian_court.yaml defaults (Bookman Old Style 14pt,
+# legal paper, single-spaced) unless the lawyer's SOUL.md overrides it.
+
+court_id: cjm_s138_complaint
+display_name: "CJM / JMFC — S.138 NI Act Complaint"
+
+jurisdiction_keywords:
+  - cjm
+  - jmfc
+  - chief judicial magistrate
+  - judicial magistrate first class
+  - magistrate
+  - district court
+  - sessions
+  - gbN
+  - greater noida
+  - noida
+  - ghaziabad
+  - meerut
+  - saket
+  - dwarka
+  - rohini
+
+matter_types:
+  - s138_complaint
+  - s138
+  - s.138
+  - cheque_dishonour
+  - cheque_bounce
+  - ni_act
+  - negotiable_instruments
+  - dishonoured_cheque
+
+formatting:
+  paper: Legal
+  margins:
+    left_inches: 1.0
+    right_inches: 1.0
+    top_inches: 1.0
+    bottom_inches: 1.0
+  font_name: "Bookman Old Style"
+  font_size_pt: 14
+  line_spacing: single
+  para_numbering: arabic
+  heading_style: bold_centered
+
+# P0 — missing any of these blocks the filing at the counter
+mandatory_sections:
+  - TITLE_BLOCK           # IN THE COURT OF CJM / JMFC...
+  - PARTIES               # Complainant vs. Accused
+  - CAUSE_OF_ACTION       # cheque number, date, amount, dishonour date
+  - FACTS_IN_BRIEF        # transaction background + cheque issuance
+  - LIMITATION            # 30-day demand notice served; 15-day window; filed in time
+  - PRAYER                # conviction + fine under S.138
+  - VERIFICATION          # sworn by complainant with place and date
+  - LIST_OF_DOCUMENTS     # index of exhibits
+
+# P1 — warn but do not block
+recommended_sections:
+  - S141_BLOCK            # mandatory when accused_entity_type is company/firm/proprietorship
+  - LEGAL_NOTICE_DETAILS  # date of notice, mode of service, postal acknowledgement
+  - AFFIDAVIT_IN_SUPPORT  # sworn affidavit accompanying the complaint
+
+section_order:
+  - TITLE_BLOCK
+  - PARTIES
+  - CAUSE_OF_ACTION
+  - FACTS_IN_BRIEF
+  - LEGAL_NOTICE_DETAILS
+  - LIMITATION
+  - S141_BLOCK
+  - LIST_OF_DOCUMENTS
+  - PRAYER
+  - VERIFICATION
+
+# WHY: Indian magistrate courts use EX-CW{witness}/{alpha} for complainant witness
+# exhibits. EX-CW1/A is Complainant Witness 1, Exhibit A.
+# This differs from HC practice (ANNEXURE P-1).
+annexures:
+  format: "EX-CW1/{alpha}"
+
+party_labels:
+  filer: "Complainant"
+  opposing: "Accused"
+
+stamp_paper: false
+filing_fee_note: true

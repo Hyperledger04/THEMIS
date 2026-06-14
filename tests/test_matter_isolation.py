@@ -15,14 +15,14 @@ from contextlib import contextmanager
 
 import pytest
 
-from lexagent.workspace.models import (
+from themis.workspace.models import (
     Authority,
     Draft,
     ExtractedFact,
     Matter,
     Party,
 )
-from lexagent.workspace.repository import PostgresWorkspaceRepository
+from themis.workspace.repository import PostgresWorkspaceRepository
 
 # ---------------------------------------------------------------------------
 # Reuse the SQLite shim from test_workspace_repository

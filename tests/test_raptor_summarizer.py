@@ -1,10 +1,10 @@
-"""Tests for lexagent/tools/raptor_summarizer.py"""
+"""Tests for themis/tools/raptor_summarizer.py"""
 import pytest
 from unittest.mock import AsyncMock, patch
 
-from lexagent.config import LexConfig
-from lexagent.tools.chunker import Chunk
-from lexagent.tools.raptor_summarizer import (
+from themis.config import LexConfig
+from themis.tools.chunker import Chunk
+from themis.tools.raptor_summarizer import (
     RaptorNode,
     RaptorSummarizer,
     raptor_tree_to_findings,
@@ -30,7 +30,7 @@ def _make_chunks(n: int) -> list[Chunk]:
 
 def _mock_call_llm(summary_text: str = "Doctrinal summary."):
     return patch(
-        "lexagent.nodes._llm.call_llm",
+        "themis.nodes._llm.call_llm",
         new_callable=AsyncMock,
         return_value={"content": summary_text, "tool_calls": None},
     )
@@ -95,7 +95,7 @@ async def test_build_tree_summary_text_from_llm():
 async def test_build_tree_llm_failure_graceful():
     summarizer = _make_summarizer(max_layers=1, max_cluster_size=2)
     chunks = _make_chunks(4)
-    with patch("lexagent.nodes._llm.call_llm", new_callable=AsyncMock) as mock_llm:
+    with patch("themis.nodes._llm.call_llm", new_callable=AsyncMock) as mock_llm:
         mock_llm.side_effect = RuntimeError("API down")
         tree = await summarizer.build_tree(chunks)
     assert isinstance(tree, list)

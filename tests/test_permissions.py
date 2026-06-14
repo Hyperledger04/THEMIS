@@ -1,6 +1,6 @@
-"""Tests for RBAC permission matrix — lexagent/security/permissions.py."""
+"""Tests for RBAC permission matrix — themis/security/permissions.py."""
 import pytest
-from lexagent.security.permissions import (
+from themis.security.permissions import (
     PERMISSION_MATRIX,
     _has_permission,
     check_permission,

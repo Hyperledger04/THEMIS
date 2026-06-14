@@ -1,0 +1,82 @@
+# Supreme Court of India — Special Leave Petition (Article 136)
+#
+# Structural rules per Supreme Court Rules 2013 (as amended):
+#   - Limitation paragraph is P0 (delay must be explained if filing beyond 90/30 days)
+#   - Questions of Law is P0 — SC only admits on substantial question of law
+#   - Synopsis and List of Dates are mandatory per SCR 2013 Order XIII Rule 4
+#   - All annexures must be certified copies (photocopies not accepted)
+#   - Annexures follow ANNEXURE P-{n} format
+#   - Impugned judgment details are P0 (court, date, case number of judgment being challenged)
+#   - Caveat notice paragraph if caveator exists
+
+court_id: sc_slp
+display_name: "Supreme Court of India — SLP (Art. 136)"
+
+jurisdiction_keywords:
+  - supreme court
+  - sc
+  - hon'ble supreme court
+  - supreme court of india
+
+matter_types:
+  - slp
+  - special_leave_petition
+  - article_136
+  - sc_appeal
+  - civil_appeal
+  - criminal_appeal_sc
+  - transfer_petition
+
+formatting:
+  paper: A4
+  margins:
+    left_inches: 1.5
+    right_inches: 1.0
+    top_inches: 1.0
+    bottom_inches: 1.0
+  font_name: "Times New Roman"
+  font_size_pt: 12
+  line_spacing: double
+  para_numbering: arabic
+  heading_style: bold_centered
+
+mandatory_sections:
+  - TITLE_BLOCK             # IN THE SUPREME COURT OF INDIA
+  - PARTIES
+  - IMPUGNED_JUDGMENT       # details of the judgment / order being challenged — P0
+  - SYNOPSIS                # mandatory per SCR 2013 Order XIII Rule 4
+  - LIST_OF_DATES           # mandatory per SCR 2013
+  - FACTS_IN_BRIEF
+  - QUESTIONS_OF_LAW        # substantial questions — P0; SC will not admit without this
+  - GROUNDS                 # grounds for challenge
+  - LIMITATION              # P0 if filing is delayed beyond limitation period
+  - PRAYER
+  - VERIFICATION
+
+recommended_sections:
+  - INTERIM_RELIEF          # stay of impugned order
+  - CAVEAT_NOTICE
+
+section_order:
+  - TITLE_BLOCK
+  - PARTIES
+  - IMPUGNED_JUDGMENT
+  - SYNOPSIS
+  - LIST_OF_DATES
+  - FACTS_IN_BRIEF
+  - QUESTIONS_OF_LAW
+  - GROUNDS
+  - LIMITATION
+  - PRAYER
+  - VERIFICATION
+
+# WHY: SCR 2013 mandates certified copies as Annexure P-1, P-2 etc.
+annexures:
+  format: "ANNEXURE P-{n}"
+
+party_labels:
+  filer: "Petitioner"
+  opposing: "Respondent"
+
+stamp_paper: false
+filing_fee_note: true

@@ -1,5 +1,5 @@
 """
-Tests for PostgresWorkspaceRepository — lexagent/workspace/repository.py
+Tests for PostgresWorkspaceRepository — themis/workspace/repository.py
 
 Uses an in-memory SQLite3 adapter shim (not Postgres) so tests run without
 a live database. The shim translates the psycopg connection interface to
@@ -14,7 +14,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from lexagent.workspace.models import (
+from themis.workspace.models import (
     Authority,
     ChronologyItem,
     Deadline,
@@ -28,7 +28,7 @@ from lexagent.workspace.models import (
     SourceAnchor,
     Task,
 )
-from lexagent.workspace.repository import PostgresWorkspaceRepository
+from themis.workspace.repository import PostgresWorkspaceRepository
 
 
 # ---------------------------------------------------------------------------

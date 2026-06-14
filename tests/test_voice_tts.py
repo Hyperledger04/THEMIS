@@ -5,8 +5,8 @@
 
 import pytest
 
-from lexagent.voice.tts import StubTTS, GoogleTTS, ElevenLabsTTS, get_tts_backend, TTSBackend, _clean_for_speech
-from lexagent.config import LexConfig
+from themis.voice.tts import StubTTS, GoogleTTS, ElevenLabsTTS, get_tts_backend, TTSBackend, _clean_for_speech
+from themis.config import LexConfig
 
 
 # ─── StubTTS ────────────────────────────────────────────────────────────────

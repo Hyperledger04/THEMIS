@@ -1,7 +1,7 @@
 import pytest
 
-from lexagent.config import LexConfig
-from lexagent.providers.router import ModelRouter
+from themis.config import LexConfig
+from themis.providers.router import ModelRouter
 
 
 def test_model_router_builds_provider_prefixed_model():
@@ -41,7 +41,7 @@ async def test_generate_uses_litellm(monkeypatch):
     class _FakeLiteLLM:
         acompletion = staticmethod(fake_acompletion)
 
-    monkeypatch.setattr("lexagent.providers.router.litellm", _FakeLiteLLM)
+    monkeypatch.setattr("themis.providers.router.litellm", _FakeLiteLLM)
 
     result = await router.generate(messages=[{"role": "user", "content": "hi"}])
 

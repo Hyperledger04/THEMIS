@@ -1,5 +1,5 @@
 """
-Tests for lexagent/kb/collections.py.
+Tests for themis/kb/collections.py.
 
 Covers:
 - Collection name generation (firm, matter, judgments)
@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from lexagent.kb.collections import (
+from themis.kb.collections import (
     _safe,
     decrypt_payload,
     encrypt_payload,
@@ -72,7 +72,7 @@ def test_ensure_collections_creates_firm_and_judgments():
     mock_client = MagicMock()
     mock_client.get_collections.return_value.collections = []
 
-    with patch("lexagent.kb.collections.QdrantClient", return_value=mock_client):
+    with patch("themis.kb.collections.QdrantClient", return_value=mock_client):
         ensure_collections("acme_law", cfg=cfg)
 
     created_names = [call.kwargs["collection_name"] for call in mock_client.create_collection.call_args_list]
@@ -92,7 +92,7 @@ def test_ensure_collections_skips_existing():
     mock_client = MagicMock()
     mock_client.get_collections.return_value.collections = [existing_col]
 
-    with patch("lexagent.kb.collections.QdrantClient", return_value=mock_client):
+    with patch("themis.kb.collections.QdrantClient", return_value=mock_client):
         ensure_collections("acme_law", cfg=cfg)
 
     created_names = [call.kwargs["collection_name"] for call in mock_client.create_collection.call_args_list]
@@ -109,7 +109,7 @@ def test_ensure_collections_creates_matter_when_provided():
     mock_client = MagicMock()
     mock_client.get_collections.return_value.collections = []
 
-    with patch("lexagent.kb.collections.QdrantClient", return_value=mock_client):
+    with patch("themis.kb.collections.QdrantClient", return_value=mock_client):
         ensure_collections("acme_law", matter_id="M-001", cfg=cfg)
 
     created_names = [call.kwargs["collection_name"] for call in mock_client.create_collection.call_args_list]

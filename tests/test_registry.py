@@ -1,7 +1,7 @@
 """Tests for ToolRegistry — write tests first, then implementation."""
 
 import pytest
-from lexagent.tools.registry import ToolRegistry
+from themis.tools.registry import ToolRegistry
 
 
 @pytest.fixture(autouse=True)

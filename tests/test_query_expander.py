@@ -1,5 +1,5 @@
-"""Tests for lexagent/tools/query_expander.py"""
-from lexagent.tools.query_expander import LEGAL_SYNONYMS, expand_query, weight_terms, _tokenize
+"""Tests for themis/tools/query_expander.py"""
+from themis.tools.query_expander import LEGAL_SYNONYMS, expand_query, weight_terms, _tokenize
 
 
 # -----------------------------------------------------------------------

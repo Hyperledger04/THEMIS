@@ -1,4 +1,4 @@
-"""Tests for lexagent/runtime/brakes.py — CostLedger, HaltFlag, PhaseGate."""
+"""Tests for themis/runtime/brakes.py — CostLedger, HaltFlag, PhaseGate."""
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from lexagent.runtime.brakes import (
+from themis.runtime.brakes import (
     CostCapReached,
     CostLedger,
     HaltFlag,

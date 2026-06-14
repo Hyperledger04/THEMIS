@@ -1,9 +1,9 @@
-"""Tests for lexagent/security/tiers.py and lexagent/gateway/tier_middleware.py."""
+"""Tests for themis/security/tiers.py and themis/gateway/tier_middleware.py."""
 from __future__ import annotations
 
 import pytest
 
-from lexagent.security.tiers import (
+from themis.security.tiers import (
     InferenceTier,
     TierFloorConfig,
     TierViolation,
@@ -125,7 +125,7 @@ async def test_tier_middleware_passes_compliant_tier(monkeypatch):
 
     monkeypatch.setenv("LEX_INFERENCE_TIER_FLOOR", "4")
 
-    from lexagent.gateway.tier_middleware import TierFloorMiddleware
+    from themis.gateway.tier_middleware import TierFloorMiddleware
 
     app = MagicMock()
     middleware = TierFloorMiddleware(app)
@@ -147,7 +147,7 @@ async def test_tier_middleware_blocks_weaker_tier(monkeypatch):
 
     monkeypatch.setenv("LEX_INFERENCE_TIER_FLOOR", "3")
 
-    from lexagent.gateway.tier_middleware import TierFloorMiddleware
+    from themis.gateway.tier_middleware import TierFloorMiddleware
     from fastapi.responses import JSONResponse
 
     app = MagicMock()
@@ -171,7 +171,7 @@ async def test_tier_middleware_no_header_sets_default(monkeypatch):
 
     monkeypatch.setenv("LEX_INFERENCE_TIER_FLOOR", "2")
 
-    from lexagent.gateway.tier_middleware import TierFloorMiddleware
+    from themis.gateway.tier_middleware import TierFloorMiddleware
 
     app = MagicMock()
     middleware = TierFloorMiddleware(app)
@@ -192,7 +192,7 @@ async def test_tier_middleware_invalid_header_returns_400(monkeypatch):
 
     monkeypatch.setenv("LEX_INFERENCE_TIER_FLOOR", "4")
 
-    from lexagent.gateway.tier_middleware import TierFloorMiddleware
+    from themis.gateway.tier_middleware import TierFloorMiddleware
     from fastapi.responses import JSONResponse
 
     app = MagicMock()

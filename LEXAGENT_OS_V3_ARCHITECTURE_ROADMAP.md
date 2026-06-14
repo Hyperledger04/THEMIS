@@ -423,6 +423,8 @@ contract_ingest -> clause_map -> risk_playbook -> deviation_analysis
 -> negotiation_positions -> redline -> executive_summary
 ```
 
+> **Redline is implementable now** (Phase 0 addition, §19): OOXML `<w:ins>`/`<w:del>` via lxml, paragraph-level difflib, no draft versioning infra required. Ships as `lexagent/tools/redline.py` + `--redline` CLI flag. See §19.
+
 ## 8. Event-Driven Runtime
 
 Events:
@@ -509,6 +511,19 @@ New matter or uploaded files
 Approval rule:
 - The living agent may read, summarize, extract, draft, analyze, and recommend.
 - It must not file, send emails/notices, message clients, or mutate external systems without explicit approval.
+
+### 8A-Bridge: Grid Analysis (doc-haus pattern — ships before Phase 4)
+
+Full bulk document intelligence (Phase 4) requires the ingestion pipeline, Qdrant, and chronology builders. Grid Analysis delivers the "same question across all documents" surface now via `lexagent/nodes/grid.py` using the existing `document_qa` node in parallel. Full implementation in §19.
+
+```text
+lex grid <matter_id> --questions "Q1" "Q2" --csv output.csv
+  → _list_matter_docs(matter_id)  — scans ~/.lexagent/matters/{id}/docs/
+  → asyncio.gather(_run_qa(q, doc) for q in questions for doc in docs)
+  → {question: {doc_name: answer}}  → Rich table + optional CSV
+```
+
+Feeds Phase 4: grid results become a first-class input to the bulk intelligence pipeline. When the full ingestion layer ships, `_list_matter_docs` is replaced by a workspace repository query.
 
 ### 8B. Bulk Document Intelligence
 
@@ -760,6 +775,20 @@ Draft
   -> Critic: logic and persuasiveness
   -> Senior Counsel approval
 ```
+
+### 11A-Bridge: Chamber MVP (doc-haus pattern — ships before Phase 11)
+
+The full chamber (§5) requires Phase 7 planner DAGs and Phase 11 subagent contracts. The Chamber MVP delivers the core adversarial loop now as a single LangGraph node (`lexagent/nodes/chamber.py`) with three sequential LLM calls. It is a bridge: same pattern, no subagent infrastructure. Full implementation in §19.
+
+```text
+draft_output
+  → Reviewer LLM  → chamber_issues (numbered issue list)
+  → Challenger LLM (sees issues + draft) → chamber_pushback (VALID / OVERSTATED / WRONG per item)
+  → Summarizer LLM (sees issues + pushback + draft) → chamber_review (action items + RISK LEVEL)
+```
+
+Activation: `--chamber` CLI flag OR automatic when `matter_type == "contract_review"`.
+Graph insertion: conditional edge `draft → chamber → review` (bypasses chamber when disabled).
 
 Review dimensions:
 - Legal validity
@@ -1256,12 +1285,725 @@ Why: legal data requires operational discipline.
 - Full 67-agent roster.
 - LlamaParse as default ingestion; use local extraction/OCR fallback first.
 - PageIndex until long-document retrieval is a measured bottleneck.
-- Redline DOCX until draft versioning is stable.
+- ~~Redline DOCX until draft versioning is stable.~~ → Moved to Phase 0 / §19: OOXML approach is independent of draft versioning; ships now.
 - OpenAPI/MCP arbitrary connector marketplace.
 - LLM council across providers.
 - Translation filing mode.
 - Email sending automation beyond approval-gated drafts.
 - Paid SCC/Lexis/Westlaw integrations until licensing/product scope is clear.
+
+## 19. doc-haus Feature Synthesis — Implementation Plans
+
+*Source: architectural analysis of [sure-scale/doc-haus](https://github.com/sure-scale/doc-haus), a TypeScript legal AI system for contract analysis built as a fork of OpenCode. Three capabilities were identified as absent from LexAgent and directly portable to the Python/LangGraph stack.*
+
+> **For agentic workers:** Use `superpowers:subagent-driven-development` or `superpowers:executing-plans` to implement each feature. Steps use `- [ ]` syntax.
+
+### doc-haus Feature Map
+
+| Feature | doc-haus | LexAgent gap | V3 anchor |
+|---------|----------|-------------|-----------|
+| Word-native tracked-changes redlining | Core output format | `docx_writer` writes clean files only | §7 Contract Review DAG, Phase 0 |
+| Adversarial multi-agent review (Reviewer → Challenger → Summarizer) | Multi-agent review mode | Single-pass `review.py` | §11 Reflection Architecture |
+| Grid analysis — one question sheet across all docs in a matter | Core product surface | `document_qa` is single-doc only | §8B Bulk Document Intelligence |
+
+---
+
+### Feature 1: Tracked-Changes Redlining (`lexagent/tools/redline.py`)
+
+**Why now (not postponed):** The V3 roadmap deferred redline "until draft versioning is stable." doc-haus shows the implementation is independent of versioning: OOXML `<w:ins>`/`<w:del>` is paragraph-level difflib + lxml injection. No new tables, no new infra. Ships as a tool; review node calls it if `redline_source_path` is set.
+
+**File map:**
+
+| Action | Path |
+|--------|------|
+| Create | `lexagent/tools/redline.py` |
+| Create | `tests/test_redline.py` |
+| Modify | `lexagent/state.py` — add `redline_source_path: Optional[str]`, `redline_output_path: Optional[str]` |
+| Modify | `lexagent/nodes/review.py` — call `write_redline_docx` after docx write if source set |
+| Modify | `lexagent/cli.py` — `--redline / -R` flag on `draft` command |
+
+#### Task 1.1 — Core redline tool
+
+- [ ] **Write failing tests** (`tests/test_redline.py`)
+
+```python
+import pytest
+from pathlib import Path
+from docx import Document
+from lexagent.tools.redline import write_redline_docx
+
+@pytest.fixture
+def original_docx(tmp_path):
+    doc = Document()
+    doc.add_paragraph("The agreement shall commence on 1 January 2025.")
+    doc.add_paragraph("Either party may terminate with 30 days notice.")
+    p = tmp_path / "original.docx"
+    doc.save(str(p))
+    return str(p)
+
+def test_redline_creates_output_file(original_docx, tmp_path):
+    revised = (
+        "The agreement shall commence on 1 March 2026.\n"
+        "Either party may terminate with 60 days notice."
+    )
+    out = str(tmp_path / "redlined.docx")
+    result = write_redline_docx(original_docx, revised, out)
+    assert Path(result).exists()
+
+def test_redline_contains_tracked_change_markup(original_docx, tmp_path):
+    revised = (
+        "The agreement shall commence on 1 January 2025.\n"
+        "Either party may terminate with 60 days notice."
+    )
+    out = str(tmp_path / "redlined.docx")
+    write_redline_docx(original_docx, revised, out)
+    import zipfile
+    with zipfile.ZipFile(out) as z:
+        xml = z.read("word/document.xml").decode()
+    assert "w:ins" in xml or "w:del" in xml
+
+def test_redline_unchanged_para_has_no_markup(original_docx, tmp_path):
+    revised = (
+        "The agreement shall commence on 1 January 2025.\n"
+        "Either party may terminate with 60 days notice."
+    )
+    out = str(tmp_path / "redlined.docx")
+    write_redline_docx(original_docx, revised, out)
+    import zipfile
+    with zipfile.ZipFile(out) as z:
+        xml = z.read("word/document.xml").decode()
+    assert "1 January 2025" in xml  # unchanged — must not be inside <w:del>
+
+def test_redline_returns_absolute_path(original_docx, tmp_path):
+    revised = "The agreement shall commence on 1 March 2026.\n"
+    out = str(tmp_path / "out.docx")
+    result = write_redline_docx(original_docx, revised, out)
+    assert result == str(Path(out).resolve())
+```
+
+- [ ] **Run to verify failure:** `pytest tests/test_redline.py -v` → `ImportError`
+
+- [ ] **Implement `lexagent/tools/redline.py`**
+
+```python
+"""
+Word-compatible tracked-changes redlining for LexAgent.
+
+Diffs original .docx paragraph-by-paragraph against revised_text,
+injects OOXML <w:del>/<w:ins> so Word shows tracked changes natively.
+
+WHY lxml direct injection: python-docx has no tracked-changes API;
+we reach into paragraph._p and build the OOXML namespace-aware elements
+directly — the same encoding Word uses internally.
+"""
+from __future__ import annotations
+import difflib, uuid
+from datetime import datetime, timezone
+from pathlib import Path
+from docx import Document
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
+
+_AUTHOR = "LexAgent"
+_DATE = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+def _rev_id() -> str:
+    return str(uuid.uuid4().int)[:8]
+
+def _make_del_run(text: str) -> OxmlElement:
+    el = OxmlElement("w:del")
+    el.set(qn("w:id"), _rev_id())
+    el.set(qn("w:author"), _AUTHOR)
+    el.set(qn("w:date"), _DATE)
+    r = OxmlElement("w:r")
+    dt = OxmlElement("w:delText")
+    dt.set(qn("xml:space"), "preserve")
+    dt.text = text
+    r.append(dt)
+    el.append(r)
+    return el
+
+def _make_ins_run(text: str) -> OxmlElement:
+    el = OxmlElement("w:ins")
+    el.set(qn("w:id"), _rev_id())
+    el.set(qn("w:author"), _AUTHOR)
+    el.set(qn("w:date"), _DATE)
+    r = OxmlElement("w:r")
+    t = OxmlElement("w:t")
+    t.set(qn("xml:space"), "preserve")
+    t.text = text
+    r.append(t)
+    el.append(r)
+    return el
+
+def _patch_paragraph(para, old_text: str, new_text: str) -> None:
+    p = para._p
+    for child in list(p):
+        tag = child.tag.split("}")[-1] if "}" in child.tag else child.tag
+        if tag in ("r", "del", "ins"):
+            p.remove(child)
+    old_words = old_text.split()
+    new_words = new_text.split()
+    for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(
+        None, old_words, new_words, autojunk=False
+    ).get_opcodes():
+        if tag == "equal":
+            r = OxmlElement("w:r")
+            t = OxmlElement("w:t")
+            t.set(qn("xml:space"), "preserve")
+            t.text = " ".join(old_words[i1:i2]) + " "
+            r.append(t)
+            p.append(r)
+        elif tag == "replace":
+            p.append(_make_del_run(" ".join(old_words[i1:i2])))
+            p.append(_make_ins_run(" ".join(new_words[j1:j2])))
+        elif tag == "delete":
+            p.append(_make_del_run(" ".join(old_words[i1:i2])))
+        elif tag == "insert":
+            p.append(_make_ins_run(" ".join(new_words[j1:j2])))
+
+def write_redline_docx(original_path: str, revised_text: str, output_path: str) -> str:
+    """
+    Produce a Word-compatible redlined .docx.
+
+    Args:
+        original_path: Path to original .docx.
+        revised_text:  Revised draft as plain string (paragraphs separated by newlines).
+        output_path:   Destination path.
+
+    Returns:
+        Absolute path of the written file.
+    """
+    doc = Document(original_path)
+    revised_paras = [p for p in revised_text.split("\n") if p.strip()]
+    for i, para in enumerate(doc.paragraphs):
+        old_text = para.text.strip()
+        if not old_text:
+            continue
+        new_text = revised_paras[i].strip() if i < len(revised_paras) else ""
+        if old_text != new_text:
+            _patch_paragraph(para, old_text, new_text)
+    for j in range(len(doc.paragraphs), len(revised_paras)):
+        new_para = doc.add_paragraph()
+        _patch_paragraph(new_para, "", revised_paras[j].strip())
+    doc.save(output_path)
+    return str(Path(output_path).resolve())
+```
+
+- [ ] **Run:** `pytest tests/test_redline.py -v` → 4 passed
+
+- [ ] **Add state fields** in `lexagent/state.py`:
+
+```python
+    redline_source_path: Optional[str]   # original .docx to diff against
+    redline_output_path: Optional[str]   # path written by review node
+```
+
+- [ ] **Wire into `lexagent/nodes/review.py`** (end of `run()`, after docx write):
+
+```python
+    from lexagent.tools.redline import write_redline_docx
+    redline_output_path = None
+    if state.get("redline_source_path") and state.get("draft_output"):
+        redline_out = str(
+            Path(state.get("docx_path", "/tmp/redline.docx")).parent / "redline.docx"
+        )
+        try:
+            redline_output_path = write_redline_docx(
+                state["redline_source_path"], state["draft_output"], redline_out
+            )
+        except Exception:
+            pass  # non-fatal; clean draft already written
+    # include in returned dict:
+    # "redline_output_path": redline_output_path
+```
+
+- [ ] **Add `--redline` to `lexagent/cli.py`** `draft` command:
+
+```python
+    redline: Optional[str] = typer.Option(
+        None, "--redline", "-R",
+        help="Path to original .docx to redline against the new draft.",
+    ),
+    # in initial state dict:
+    # "redline_source_path": redline,
+```
+
+- [ ] **Run:** `pytest tests/test_redline.py -v` → all pass
+
+- [ ] **Commit:**
+```bash
+git add lexagent/tools/redline.py tests/test_redline.py lexagent/state.py lexagent/nodes/review.py lexagent/cli.py
+git commit -m "feat(redline): OOXML tracked-changes redlining — doc-haus fork"
+```
+
+---
+
+### Feature 2: Adversarial Chamber MVP (`lexagent/nodes/chamber.py`)
+
+**Architecture anchor:** §11-Bridge (above). Three sequential LLM calls; no subagent contracts needed. The full §5 chamber replaces this node in Phase 11 — same interface, richer internals.
+
+**File map:**
+
+| Action | Path |
+|--------|------|
+| Create | `lexagent/nodes/chamber.py` |
+| Create | `lexagent/prompts/chamber_reviewer.txt` |
+| Create | `lexagent/prompts/chamber_challenger.txt` |
+| Create | `lexagent/prompts/chamber_summarizer.txt` |
+| Create | `tests/test_chamber.py` |
+| Modify | `lexagent/state.py` — add `chamber_enabled`, `chamber_issues`, `chamber_pushback`, `chamber_review` |
+| Modify | `lexagent/graph.py` — conditional edge `draft → chamber → review` |
+| Modify | `lexagent/cli.py` — `--chamber / -C` flag |
+
+#### Task 2.1 — Prompt templates
+
+- [ ] **Create `lexagent/prompts/chamber_reviewer.txt`:**
+
+```
+You are a senior Indian litigation review advocate.
+
+Review the draft below and identify every material weakness.
+Output a NUMBERED LIST OF ISSUES. Each issue states:
+  - The specific clause or section
+  - The legal or procedural risk
+  - The recommended fix
+
+Draft:
+{draft_output}
+
+Skill context:
+{active_skill}
+
+Jurisdiction: {jurisdiction}
+Matter type: {matter_type}
+
+Be precise and clinical. Do not summarise — only identify issues.
+```
+
+- [ ] **Create `lexagent/prompts/chamber_challenger.txt`:**
+
+```
+You are a defence advocate reviewing a peer's issue list.
+
+For each issue below, decide:
+  (a) VALID — agree and amplify
+  (b) OVERSTATED — agree in principle but severity is exaggerated
+  (c) WRONG — the issue does not exist or the draft is correct
+
+State your verdict and one sentence of reasoning per item.
+
+Reviewer Issues:
+{chamber_issues}
+
+Original Draft:
+{draft_output}
+```
+
+- [ ] **Create `lexagent/prompts/chamber_summarizer.txt`:**
+
+```
+You are chief editorial counsel.
+
+Synthesise the reviewer's issues and challenger's verdicts into a FINAL REVIEW.
+
+Rules:
+- VALID issues → ACTION ITEM (imperative, specific)
+- OVERSTATED issues → ADVISORY item (softer language)
+- WRONG items → exclude entirely
+- End with RISK LEVEL: LOW / MEDIUM / HIGH and one sentence rationale.
+
+Reviewer Issues:
+{chamber_issues}
+
+Challenger Verdicts:
+{chamber_pushback}
+
+Draft:
+{draft_output}
+```
+
+- [ ] **Commit prompts:**
+```bash
+git add lexagent/prompts/chamber_*.txt
+git commit -m "feat(chamber): add adversarial review prompt templates"
+```
+
+#### Task 2.2 — Node implementation
+
+- [ ] **Write failing tests** (`tests/test_chamber.py`):
+
+```python
+import pytest
+from unittest.mock import AsyncMock, patch, MagicMock
+from lexagent.nodes.chamber import run
+
+SAMPLE_STATE = {
+    "draft_output": "The accused issued a cheque for Rs 5 lakh. It was dishonoured on 10 Jan 2025.",
+    "active_skill": "S.138 NI Act complaint",
+    "jurisdiction": "CJM, Gurugram",
+    "matter_type": "s138_complaint",
+    "chamber_enabled": True,
+    "messages": [],
+    "error": None,
+}
+
+@pytest.mark.asyncio
+async def test_chamber_returns_three_fields():
+    mock_llm = AsyncMock()
+    mock_llm.ainvoke = AsyncMock(side_effect=[
+        MagicMock(content="1. Missing notice date\n2. No verification clause"),
+        MagicMock(content="1. VALID\n2. WRONG"),
+        MagicMock(content="ACTION: Add notice date. RISK LEVEL: MEDIUM"),
+    ])
+    with patch("lexagent.nodes.chamber._get_llm", return_value=mock_llm):
+        result = await run(SAMPLE_STATE)
+    assert "chamber_issues" in result
+    assert "chamber_pushback" in result
+    assert "chamber_review" in result
+
+@pytest.mark.asyncio
+async def test_chamber_skipped_when_disabled():
+    state = {**SAMPLE_STATE, "chamber_enabled": False}
+    result = await run(state)
+    assert result == {}
+
+@pytest.mark.asyncio
+async def test_chamber_captures_llm_error():
+    mock_llm = AsyncMock()
+    mock_llm.ainvoke = AsyncMock(side_effect=RuntimeError("quota exceeded"))
+    with patch("lexagent.nodes.chamber._get_llm", return_value=mock_llm):
+        result = await run(SAMPLE_STATE)
+    assert "error" in result
+```
+
+- [ ] **Run:** `pytest tests/test_chamber.py -v` → `ImportError`
+
+- [ ] **Implement `lexagent/nodes/chamber.py`:**
+
+```python
+"""
+Adversarial multi-agent review chamber (doc-haus pattern).
+
+Three sequential LLM calls:
+  1. Reviewer   — finds issues in the draft
+  2. Challenger — rebuts the reviewer's findings
+  3. Summarizer — synthesises both into actionable final review
+
+WHY sequential: Challenger must see Reviewer output; Summarizer must see both.
+WHY this node instead of §5 chamber agents: full subagent contracts require
+Phase 7 planner DAGs; this node is the bridge that ships now and is replaced
+in Phase 11 with identical external interface.
+"""
+from __future__ import annotations
+from pathlib import Path
+from langchain_anthropic import ChatAnthropic
+from lexagent.config import LexConfig
+from lexagent.state import LexState
+
+def _get_llm():
+    cfg = LexConfig()
+    return ChatAnthropic(model=cfg.model, api_key=cfg.anthropic_api_key, max_tokens=2048)
+
+def _load_prompt(name: str, **kwargs) -> str:
+    p = Path(__file__).parent.parent / "prompts" / f"{name}.txt"
+    return p.read_text().format(**kwargs)
+
+async def run(state: LexState) -> dict:
+    if not state.get("chamber_enabled"):
+        return {}
+    draft = state.get("draft_output", "")
+    try:
+        llm = _get_llm()
+        # LANGGRAPH: nodes must return partial state dicts; never raise
+        issues = (await llm.ainvoke(_load_prompt(
+            "chamber_reviewer",
+            draft_output=draft,
+            active_skill=state.get("active_skill", ""),
+            jurisdiction=state.get("jurisdiction", ""),
+            matter_type=state.get("matter_type", ""),
+        ))).content
+        pushback = (await llm.ainvoke(_load_prompt(
+            "chamber_challenger", chamber_issues=issues, draft_output=draft,
+        ))).content
+        final_review = (await llm.ainvoke(_load_prompt(
+            "chamber_summarizer",
+            chamber_issues=issues, chamber_pushback=pushback, draft_output=draft,
+        ))).content
+        return {"chamber_issues": issues, "chamber_pushback": pushback, "chamber_review": final_review}
+    except Exception as exc:
+        return {"error": f"chamber: {exc}"}
+```
+
+- [ ] **Run:** `pytest tests/test_chamber.py -v` → 3 passed
+
+- [ ] **Add state fields** in `lexagent/state.py`:
+
+```python
+    chamber_enabled: bool          # activated by --chamber flag or contract_review
+    chamber_issues: Optional[str]
+    chamber_pushback: Optional[str]
+    chamber_review: Optional[str]
+```
+
+- [ ] **Wire into graph** in `lexagent/graph.py`:
+
+```python
+from lexagent.nodes import chamber   # add import
+
+graph.add_node("chamber", chamber.run)
+# LANGGRAPH: add_conditional_edges routes by state value
+# Replace the direct draft→review edge with:
+graph.add_conditional_edges(
+    "draft",
+    lambda state: "chamber" if state.get("chamber_enabled") else "review",
+    {"chamber": "chamber", "review": "review"},
+)
+graph.add_edge("chamber", "review")
+```
+
+- [ ] **Add `--chamber` to `lexagent/cli.py`** `draft` command:
+
+```python
+    chamber: bool = typer.Option(False, "--chamber", "-C",
+        help="Enable adversarial multi-agent review chamber."),
+    # in initial state dict:
+    # "chamber_enabled": chamber or (matter_type == "contract_review"),
+```
+
+- [ ] **Run:** `pytest tests/test_chamber.py tests/ -k "chamber or graph" -v` → all pass
+
+- [ ] **Commit:**
+```bash
+git add lexagent/nodes/chamber.py tests/test_chamber.py lexagent/state.py lexagent/graph.py lexagent/cli.py
+git commit -m "feat(chamber): adversarial review chamber node — doc-haus fork"
+```
+
+---
+
+### Feature 3: Grid Analysis (`lexagent/nodes/grid.py`)
+
+**Architecture anchor:** §8A-Bridge (above). Bridges to Phase 4 bulk intelligence. When Phase 4 ingestion ships, `_list_matter_docs` is swapped for a workspace repository query — same node, no interface change.
+
+**File map:**
+
+| Action | Path |
+|--------|------|
+| Create | `lexagent/nodes/grid.py` |
+| Create | `tests/test_grid.py` |
+| Modify | `lexagent/state.py` — add `grid_questions: list[str]`, `grid_results: dict` |
+| Modify | `lexagent/cli.py` — new `lex grid` Typer subcommand |
+
+#### Task 3.1 — Grid node
+
+- [ ] **Write failing tests** (`tests/test_grid.py`):
+
+```python
+import pytest
+from unittest.mock import AsyncMock, patch
+from lexagent.nodes.grid import run
+
+BASE_STATE = {
+    "matter_id": "test-matter-001",
+    "grid_questions": ["What is the notice period?", "Who are the parties?"],
+    "messages": [],
+    "error": None,
+}
+
+@pytest.mark.asyncio
+async def test_grid_returns_results_dict():
+    mock_qa = AsyncMock(return_value={"qa_answer": "30 days", "qa_citations": []})
+    fake_docs = ["contract_A.pdf", "contract_B.pdf"]
+    with patch("lexagent.nodes.grid._list_matter_docs", return_value=fake_docs), \
+         patch("lexagent.nodes.grid._run_qa", mock_qa):
+        result = await run(BASE_STATE)
+    assert "grid_results" in result
+    assert "What is the notice period?" in result["grid_results"]
+    assert "contract_A.pdf" in result["grid_results"]["What is the notice period?"]
+
+@pytest.mark.asyncio
+async def test_grid_empty_questions_returns_empty():
+    result = await run({**BASE_STATE, "grid_questions": []})
+    assert result == {}
+
+@pytest.mark.asyncio
+async def test_grid_captures_qa_error():
+    mock_qa = AsyncMock(side_effect=RuntimeError("retrieval failed"))
+    with patch("lexagent.nodes.grid._list_matter_docs", return_value=["a.pdf"]), \
+         patch("lexagent.nodes.grid._run_qa", mock_qa):
+        result = await run(BASE_STATE)
+    assert "grid_results" in result
+    # errors stored per-cell, not raised
+    err_val = list(result["grid_results"]["What is the notice period?"].values())[0]
+    assert "error" in err_val
+```
+
+- [ ] **Run:** `pytest tests/test_grid.py -v` → `ImportError`
+
+- [ ] **Implement `lexagent/nodes/grid.py`:**
+
+```python
+"""
+Grid analysis node (doc-haus pattern).
+
+Runs a fixed question list across every document in the matter workspace
+in parallel: {question: {doc_name: answer}}.
+
+WHY asyncio.gather: each (question, doc) pair is an independent LLM call;
+parallel cuts latency from O(Q×D) to O(max_single_call_latency).
+WHY error-per-cell: one bad document must not abort the entire grid run.
+WHY _list_matter_docs is a standalone function: Phase 4 will swap it for
+a workspace.repository.list_documents(matter_id) call with no node changes.
+"""
+from __future__ import annotations
+import asyncio
+from pathlib import Path
+from lexagent.config import LexConfig
+from lexagent.state import LexState
+
+def _list_matter_docs(matter_id: str) -> list[str]:
+    cfg = LexConfig()
+    matter_dir = Path(cfg.matters_dir) / matter_id / "docs"
+    if not matter_dir.exists():
+        return []
+    return [
+        str(p) for p in matter_dir.iterdir()
+        if p.suffix.lower() in {".pdf", ".docx", ".txt"}
+    ]
+
+async def _run_qa(question: str, doc_path: str, state: LexState) -> dict:
+    from lexagent.nodes.document_qa import run as qa_run
+    return await qa_run({**state, "qa_question": question, "qa_document_path": doc_path})
+
+async def run(state: LexState) -> dict:
+    questions: list[str] = state.get("grid_questions", [])
+    if not questions:
+        return {}
+    matter_id = state.get("matter_id", "")
+    docs = _list_matter_docs(matter_id)
+    if not docs:
+        return {"grid_results": {q: {} for q in questions}}
+
+    async def _cell(question: str, doc: str) -> tuple[str, str, str]:
+        doc_name = Path(doc).name
+        try:
+            r = await _run_qa(question, doc, state)
+            return question, doc_name, r.get("qa_answer", "")
+        except Exception as exc:
+            return question, doc_name, f"[error: {exc}]"
+
+    cells = await asyncio.gather(*[_cell(q, d) for q in questions for d in docs])
+    grid: dict[str, dict[str, str]] = {q: {} for q in questions}
+    for question, doc_name, answer in cells:
+        grid[question][doc_name] = answer
+    return {"grid_results": grid}
+```
+
+- [ ] **Run:** `pytest tests/test_grid.py -v` → 3 passed
+
+- [ ] **Add state fields** in `lexagent/state.py`:
+
+```python
+    grid_questions: list[str]   # questions to run across all matter docs
+    grid_results: dict          # {question: {doc_name: answer}}
+```
+
+#### Task 3.2 — `lex grid` CLI command
+
+- [ ] **Add failing CLI test** (append to `tests/test_grid.py`):
+
+```python
+from typer.testing import CliRunner
+from lexagent.cli import app
+
+runner = CliRunner()
+
+def test_grid_cli_help_mentions_questions():
+    result = runner.invoke(app, ["grid", "--help"])
+    assert "questions" in result.output.lower()
+```
+
+- [ ] **Run:** `pytest tests/test_grid.py::test_grid_cli_help_mentions_questions -v` → fail
+
+- [ ] **Add `lex grid` to `lexagent/cli.py`:**
+
+```python
+@app.command("grid")
+def grid_cmd(
+    matter_id: str = typer.Argument(..., help="Matter ID to run grid against."),
+    questions: list[str] = typer.Option(
+        ..., "--questions", "-q",
+        help="Question to run across all documents. Repeat for multiple.",
+    ),
+    output_csv: Optional[str] = typer.Option(None, "--csv", help="Write results to CSV."),
+):
+    """Run a question grid across all documents in a matter."""
+    import asyncio, csv
+    from lexagent.nodes.grid import run as grid_run
+
+    result = asyncio.run(grid_run({
+        "matter_id": matter_id, "grid_questions": questions,
+        "messages": [], "error": None,
+    }))
+    grid = result.get("grid_results", {})
+    if not grid:
+        console.print("[yellow]No results — ingest documents first.[/yellow]")
+        raise typer.Exit(1)
+
+    from rich.table import Table
+    docs = list(next(iter(grid.values())).keys())
+    table = Table(show_header=True)
+    table.add_column("Question", style="bold")
+    for doc in docs:
+        table.add_column(doc, max_width=30)
+    for question, row in grid.items():
+        table.add_row(question, *[row.get(d, "") for d in docs])
+    console.print(table)
+
+    if output_csv:
+        with open(output_csv, "w", newline="") as f:
+            w = csv.writer(f)
+            w.writerow(["Question"] + docs)
+            for question, row in grid.items():
+                w.writerow([question] + [row.get(d, "") for d in docs])
+        console.print(f"[green]Saved to {output_csv}[/green]")
+```
+
+- [ ] **Run:** `pytest tests/test_grid.py -v` → all pass
+
+- [ ] **Commit:**
+```bash
+git add lexagent/nodes/grid.py tests/test_grid.py lexagent/state.py lexagent/cli.py
+git commit -m "feat(grid): cross-document grid analysis node + lex grid CLI — doc-haus fork"
+```
+
+---
+
+### §19 Verification
+
+```bash
+# Full test suite for all three features
+pytest tests/test_redline.py tests/test_chamber.py tests/test_grid.py -v
+# Expected: 13 tests, all passing
+
+# End-to-end: redline
+lex draft "Revise the NDA — increase notice period from 30 to 90 days" \
+    --redline /tmp/draft_v1.docx --output /tmp/draft_v2.docx
+# → /tmp/redline.docx opens in Word showing tracked changes
+
+# End-to-end: chamber
+lex draft "Review this vendor agreement" --chamber --output /tmp/review.docx
+# → console shows three phases; review.docx contains chamber_review content
+
+# End-to-end: grid
+lex grid my-dd-matter \
+    --questions "What is the notice period?" \
+    --questions "Who bears indemnity?" \
+    --csv /tmp/dd_grid.csv
+# → Rich table in console; CSV written
+```
+
+---
 
 ## Final Product Principle
 

@@ -13,9 +13,9 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev
 
 # Copy source
-COPY lexagent/ ./lexagent/
+COPY themis/ ./themis/
 
 # Expose FastAPI control plane port
 EXPOSE 8000
 
-CMD ["uv", "run", "uvicorn", "lexagent.gateway.control_plane:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uv", "run", "uvicorn", "themis.gateway.control_plane:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -1,5 +1,5 @@
 """
-Tests for the ReAct research node (lexagent/nodes/react_research.py).
+Tests for the ReAct research node (themis/nodes/react_research.py).
 
 Covers:
 - Citation enforcement gate: pass / drop logic for every required field
@@ -14,7 +14,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from lexagent.nodes.react_research import (
+from themis.nodes.react_research import (
     _enforce_citation_gate,
     _load_cached,
     _save_cached,
@@ -134,10 +134,10 @@ async def test_run_returns_research_findings_key():
     }
     mock_lim = MagicMock(return_value={"risk": "low", "analysis": "within limitation"})
     with (
-        patch("lexagent.nodes.react_research._run_kanoon_search", new_callable=AsyncMock, return_value=[]),
-        patch("lexagent.nodes.react_research._run_tavily_search", new_callable=AsyncMock, return_value=[]),
-        patch("lexagent.tools.registry.ToolRegistry.get", return_value=mock_lim),
-        patch("lexagent.tools.limitation", create=True),
+        patch("themis.nodes.react_research._run_kanoon_search", new_callable=AsyncMock, return_value=[]),
+        patch("themis.nodes.react_research._run_tavily_search", new_callable=AsyncMock, return_value=[]),
+        patch("themis.tools.registry.ToolRegistry.get", return_value=mock_lim),
+        patch("themis.tools.limitation", create=True),
     ):
         result = await run(state)
 
@@ -155,11 +155,11 @@ async def test_run_citation_gate_drops_bad_findings():
     mock_lim = MagicMock(return_value={"risk": "low"})
     mock_cfg = MagicMock(enable_kanoon=True, kanoon_api_key="test-key", tavily_enabled=False, tavily_api_key=None)
     with (
-        patch("lexagent.nodes.react_research.LexConfig", return_value=mock_cfg),
-        patch("lexagent.nodes.react_research._run_kanoon_search", new_callable=AsyncMock, return_value=[bad, good]),
-        patch("lexagent.nodes.react_research._run_tavily_search", new_callable=AsyncMock, return_value=[]),
-        patch("lexagent.tools.registry.ToolRegistry.get", return_value=mock_lim),
-        patch("lexagent.tools.limitation", create=True),
+        patch("themis.nodes.react_research.LexConfig", return_value=mock_cfg),
+        patch("themis.nodes.react_research._run_kanoon_search", new_callable=AsyncMock, return_value=[bad, good]),
+        patch("themis.nodes.react_research._run_tavily_search", new_callable=AsyncMock, return_value=[]),
+        patch("themis.tools.registry.ToolRegistry.get", return_value=mock_lim),
+        patch("themis.tools.limitation", create=True),
     ):
         result = await run(state)
 
@@ -176,11 +176,11 @@ async def test_run_includes_agent_trace():
     mock_lim = MagicMock(return_value={"risk": "low"})
     mock_cfg = MagicMock(enable_kanoon=True, kanoon_api_key="test-key", tavily_enabled=False, tavily_api_key=None)
     with (
-        patch("lexagent.nodes.react_research.LexConfig", return_value=mock_cfg),
-        patch("lexagent.nodes.react_research._run_kanoon_search", new_callable=AsyncMock, return_value=[]),
-        patch("lexagent.nodes.react_research._run_tavily_search", new_callable=AsyncMock, return_value=[]),
-        patch("lexagent.tools.registry.ToolRegistry.get", return_value=mock_lim),
-        patch("lexagent.tools.limitation", create=True),
+        patch("themis.nodes.react_research.LexConfig", return_value=mock_cfg),
+        patch("themis.nodes.react_research._run_kanoon_search", new_callable=AsyncMock, return_value=[]),
+        patch("themis.nodes.react_research._run_tavily_search", new_callable=AsyncMock, return_value=[]),
+        patch("themis.tools.registry.ToolRegistry.get", return_value=mock_lim),
+        patch("themis.tools.limitation", create=True),
     ):
         result = await run(state)
 
@@ -196,8 +196,8 @@ async def test_run_exception_returns_error_key():
     state = {"user_input": "test"}
     mock_cfg = MagicMock(enable_kanoon=True, kanoon_api_key="test-key", tavily_enabled=False, tavily_api_key=None)
     with (
-        patch("lexagent.nodes.react_research.LexConfig", return_value=mock_cfg),
-        patch("lexagent.nodes.react_research._run_kanoon_search", side_effect=RuntimeError("boom")),
+        patch("themis.nodes.react_research.LexConfig", return_value=mock_cfg),
+        patch("themis.nodes.react_research._run_kanoon_search", side_effect=RuntimeError("boom")),
     ):
         result = await run(state)
     assert "error" in result

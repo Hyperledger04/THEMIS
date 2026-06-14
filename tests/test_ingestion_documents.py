@@ -1,4 +1,4 @@
-"""Tests for lexagent/ingestion/documents.py — file ingestion pipeline."""
+"""Tests for themis/ingestion/documents.py — file ingestion pipeline."""
 from __future__ import annotations
 
 import tempfile
@@ -7,14 +7,14 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from lexagent.ingestion.documents import (
+from themis.ingestion.documents import (
     IngestedDocument,
     PageText,
     _extract_plaintext,
     _sha256_prefix,
     ingest_file,
 )
-from lexagent.workspace.models import DocumentRecord
+from themis.workspace.models import DocumentRecord
 
 
 # ---------------------------------------------------------------------------
@@ -81,7 +81,7 @@ class TestIngestFile:
         f.write_text("The cheque was dishonoured on 14 March 2026.\nThe complainant is Ramesh Kumar.")
         repo = self._make_repo()
 
-        with patch("lexagent.ingestion.documents._STORAGE_ROOT", tmp_path / "store"):
+        with patch("themis.ingestion.documents._STORAGE_ROOT", tmp_path / "store"):
             result = ingest_file(f, matter_id="M-001", firm_id="firm_a", repo=repo)
 
         assert isinstance(result, IngestedDocument)
@@ -104,7 +104,7 @@ class TestIngestFile:
         repo = self._make_repo()
         store = tmp_path / "store"
 
-        with patch("lexagent.ingestion.documents._STORAGE_ROOT", store):
+        with patch("themis.ingestion.documents._STORAGE_ROOT", store):
             result = ingest_file(f, matter_id="M-001", firm_id="firm_a", repo=repo)
 
         stored = Path(result.record.storage_uri)
@@ -118,7 +118,7 @@ class TestIngestFile:
         repo = self._make_repo()
         store = tmp_path / "store"
 
-        with patch("lexagent.ingestion.documents._STORAGE_ROOT", store):
+        with patch("themis.ingestion.documents._STORAGE_ROOT", store):
             r1 = ingest_file(f, matter_id="M-001", firm_id="firm_a", repo=repo)
             r2 = ingest_file(f, matter_id="M-001", firm_id="firm_a", repo=repo)
 

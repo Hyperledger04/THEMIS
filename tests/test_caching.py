@@ -3,7 +3,7 @@
 
 import pytest
 
-from lexagent.nodes.draft import (
+from themis.nodes.draft import (
     build_system_prompt_blocks,
     inject_memory_into_user_turn,
 )

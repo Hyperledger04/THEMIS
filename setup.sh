@@ -2,7 +2,7 @@
 set -e
 
 echo ""
-echo "Setting up LexAgent..."
+echo "Setting up Themis..."
 echo ""
 
 # Install uv if not present
@@ -29,7 +29,7 @@ if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
 fi
 
 echo ""
-echo "Done! LexAgent is ready."
+echo "Done! Themis is ready."
 echo ""
 echo "Run 'lex setup' to create your lawyer profile."
 echo "Run 'lex draft \"your matter brief\"' to generate your first draft."

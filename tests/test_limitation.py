@@ -1,7 +1,7 @@
 """Tests for the Indian Limitation Act calculator."""
 
 import pytest
-from lexagent.tools.limitation import check_limitation
+from themis.tools.limitation import check_limitation
 
 
 def test_civil_suit_returns_three_years():

@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from lexagent.memory.soul import (
+from themis.memory.soul import (
     SOUL_TEMPLATE,
     _parse_soul,
     append_soul_note,
@@ -17,14 +17,14 @@ from lexagent.memory.soul import (
     save_soul,
     soul_path,
 )
-from lexagent.memory.matter_memory import (
+from themis.memory.matter_memory import (
     list_matters,
     load_matter_memory,
     load_state_snapshot,
     matter_dir,
     save_matter_memory,
 )
-from lexagent.memory.session_store import (
+from themis.memory.session_store import (
     get_session_state,
     init_db,
     list_sessions,
@@ -398,6 +398,6 @@ class TestGetSessionState:
 # The tests above use db=db but the function signature is sessions_db.
 # Fix by wrapping:
 
-def list_sessions(limit: int = 20, db: str = "~/.lexagent/sessions.db") -> list:
-    from lexagent.memory.session_store import list_sessions as _list
+def list_sessions(limit: int = 20, db: str = "~/.themis/sessions.db") -> list:
+    from themis.memory.session_store import list_sessions as _list
     return _list(limit=limit, sessions_db=db)

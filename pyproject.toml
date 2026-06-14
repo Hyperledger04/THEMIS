@@ -1,5 +1,5 @@
 [project]
-name = "lexagent"
+name = "themis"
 version = "0.1.0"
 description = "Open-source AI agent for lawyers globally — built on LangGraph"
 requires-python = ">=3.11"
@@ -53,7 +53,7 @@ voice = [
 ]
 
 [project.scripts]
-lex = "lexagent.cli:app"
+themis = "themis.cli:app"
 
 [tool.uv]
 dev-dependencies = [

@@ -1,9 +1,9 @@
-"""Tests for lexagent/tools/kanoon_api.py — all HTTP calls mocked via respx."""
+"""Tests for themis/tools/kanoon_api.py — all HTTP calls mocked via respx."""
 import pytest
 import respx
 import httpx
 
-from lexagent.tools.kanoon_api import KanoonAPIClient, search_and_fetch_api
+from themis.tools.kanoon_api import KanoonAPIClient, search_and_fetch_api
 
 _BASE = "https://api.indiankanoon.org"
 

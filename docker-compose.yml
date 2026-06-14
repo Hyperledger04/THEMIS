@@ -1,6 +1,6 @@
 version: "3.9"
 
-# LexAgent infrastructure stack.
+# Themis infrastructure stack.
 # WHY two-file env strategy: .env.docker is committed (safe defaults only).
 # Secrets (API keys, JWT secret, encryption key) go in .env.local which is
 # gitignored. The control plane picks both up via pydantic-settings.
@@ -29,18 +29,18 @@ services:
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_DB: lexagent
-      POSTGRES_USER: lexagent
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lexagent_dev}
+      POSTGRES_DB: themis
+      POSTGRES_USER: themis
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-themis_dev}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U lexagent"]
+      test: ["CMD-SHELL", "pg_isready -U themis"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  lexagent:
+  themis:
     build:
       context: .
       dockerfile: Dockerfile
@@ -50,7 +50,7 @@ services:
     env_file:
       - .env
     environment:
-      DATABASE_URL: postgresql://lexagent:${POSTGRES_PASSWORD:-lexagent_dev}@postgres:5432/lexagent
+      DATABASE_URL: postgresql://themis:${POSTGRES_PASSWORD:-themis_dev}@postgres:5432/themis
       QDRANT_URL: http://qdrant:6333
     depends_on:
       postgres:
@@ -58,9 +58,9 @@ services:
       qdrant:
         condition: service_healthy
     volumes:
-      - lexagent_home:/root/.lexagent
+      - themis_home:/root/.themis
 
 volumes:
   qdrant_data:
   postgres_data:
-  lexagent_home:
+  themis_home:

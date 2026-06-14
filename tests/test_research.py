@@ -9,7 +9,7 @@ import pytest
 os.environ.setdefault("LEX_KANOON_BACKEND", "stub")
 os.environ.setdefault("LEX_ENABLE_KANOON", "true")
 
-from lexagent.nodes.research import _build_search_query, _extract_statutes, run
+from themis.nodes.research import _build_search_query, _extract_statutes, run
 
 
 def _state(**overrides):
@@ -121,8 +121,8 @@ async def test_run_catches_exceptions_into_error_key(monkeypatch):
         graphrag_enabled = False
         qdrant_enabled = False
 
-    monkeypatch.setattr("lexagent.nodes.research.search_and_fetch", bad_kanoon)
-    monkeypatch.setattr("lexagent.nodes.research.LexConfig", _FakeConfig)
+    monkeypatch.setattr("themis.nodes.research.search_and_fetch", bad_kanoon)
+    monkeypatch.setattr("themis.nodes.research.LexConfig", _FakeConfig)
     result = await run(_state())
     # WHY: per-tool network failures are caught gracefully — the node returns
     # empty findings rather than a fatal error, so draft can still run.
@@ -153,7 +153,7 @@ async def test_run_no_tools_configured_returns_nudge_not_error(monkeypatch):
         graphrag_enabled = False
         qdrant_enabled = False
 
-    monkeypatch.setattr("lexagent.nodes.research.LexConfig", _NoToolsConfig)
+    monkeypatch.setattr("themis.nodes.research.LexConfig", _NoToolsConfig)
     result = await run(_state())
     assert "error" not in result
     assert result["research_findings"] == []
@@ -183,7 +183,7 @@ async def test_run_no_tools_approved_tools_empty_returns_nudge(monkeypatch):
         graphrag_enabled = False
         qdrant_enabled = False
 
-    monkeypatch.setattr("lexagent.nodes.research.LexConfig", _NoToolsConfig)
+    monkeypatch.setattr("themis.nodes.research.LexConfig", _NoToolsConfig)
     result = await run(_state(approved_tools=[]))
     assert "error" not in result
     assert result["research_findings"] == []

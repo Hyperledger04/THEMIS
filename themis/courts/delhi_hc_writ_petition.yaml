@@ -1,0 +1,82 @@
+# Delhi High Court — Writ Petition (Article 226)
+#
+# Structural rules per Delhi High Court (Original Side) Rules and HC practice:
+#   - Synopsis is expected (not mandatory but strongly convention)
+#   - List of Dates is standard HC practice — chronological facts
+#   - Grounds section is P0 and must be numbered (Ground A, Ground B...)
+#   - Valuation and court fee paragraph required for civil writs
+#   - Annexures follow ANNEXURE P-{n} format (P for Petitioner)
+#   - Verification must include "solemnly affirm" language (HC standard)
+#
+# Formatting: high_court preset applies here (Times New Roman 12pt, A4, double-spaced)
+# unless the lawyer's SOUL.md overrides it.
+
+court_id: delhi_hc_writ_petition
+display_name: "Delhi High Court — Writ Petition (Art. 226)"
+
+jurisdiction_keywords:
+  - delhi hc
+  - delhi high court
+  - high court of delhi
+  - dhc
+
+matter_types:
+  - writ_petition
+  - writ
+  - article_226
+  - habeas_corpus
+  - mandamus
+  - certiorari
+  - prohibition
+  - quo_warranto
+  - pil
+
+formatting:
+  paper: A4
+  margins:
+    left_inches: 1.5
+    right_inches: 1.0
+    top_inches: 1.0
+    bottom_inches: 1.0
+  font_name: "Times New Roman"
+  font_size_pt: 12
+  line_spacing: double
+  para_numbering: arabic
+  heading_style: bold_centered
+
+mandatory_sections:
+  - TITLE_BLOCK           # IN THE HIGH COURT OF DELHI AT NEW DELHI
+  - PARTIES               # Petitioner vs. Respondent
+  - FACTS_IN_BRIEF
+  - GROUNDS               # numbered A, B, C... — P0
+  - PRAYER
+  - VERIFICATION          # "solemnly affirm" language
+
+recommended_sections:
+  - SYNOPSIS              # 1-paragraph summary — strong HC convention
+  - LIST_OF_DATES         # chronological table — expected in HC
+  - VALUATION             # court fee and valuation paragraph
+  - URGENT_MENTION        # if seeking stay / interim relief
+  - CAVEAT_NOTICE         # if caveator has filed
+
+section_order:
+  - TITLE_BLOCK
+  - PARTIES
+  - SYNOPSIS
+  - LIST_OF_DATES
+  - FACTS_IN_BRIEF
+  - GROUNDS
+  - PRAYER
+  - VERIFICATION
+
+# WHY: Delhi HC convention uses ANNEXURE P-1, P-2 for petitioner documents.
+# Respondent's documents (if filed) use R-1, R-2.
+annexures:
+  format: "ANNEXURE P-{n}"
+
+party_labels:
+  filer: "Petitioner"
+  opposing: "Respondent"
+
+stamp_paper: false
+filing_fee_note: true

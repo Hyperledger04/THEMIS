@@ -16,8 +16,8 @@ from pathlib import Path
 
 import pytest
 
-from lexagent.skills.build_skill import build
-from lexagent.skills.loader import (
+from themis.skills.build_skill import build
+from themis.skills.loader import (
     _parse_skill_directory,
     _parse_skill_package,
     _skills_from_dir,

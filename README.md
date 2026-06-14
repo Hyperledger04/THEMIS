@@ -1,8 +1,8 @@
-# LexAgent
+# Themis
 
 **Open-source AI agent for Indian litigation practice — built on LangGraph.**
 
-LexAgent takes a matter brief from a lawyer, asks targeted clarifying questions, researches Indian case law via Indian Kanoon, drafts a court-ready document with verified citations, and saves the matter to persistent memory. It runs over Telegram, voice (browser WebSocket or Twilio phone), REST API, or CLI.
+Themis takes a matter brief from a lawyer, asks targeted clarifying questions, researches Indian case law via Indian Kanoon, drafts a court-ready document with verified citations, and saves the matter to persistent memory. It runs over Telegram, voice (browser WebSocket or Twilio phone), REST API, or CLI.
 
 ---
 
@@ -10,7 +10,7 @@ LexAgent takes a matter brief from a lawyer, asks targeted clarifying questions,
 
 A lawyer types: *"I need to file a writ petition in Delhi HC challenging wrongful termination under Article 21"*
 
-LexAgent:
+Themis:
 1. Asks clarifying intake questions (parties, jurisdiction, facts, limitation)
 2. Searches Indian Kanoon for binding precedents
 3. Calculates the applicable limitation period
@@ -54,11 +54,11 @@ uv sync
 cp .env.example .env
 # Edit .env: ANTHROPIC_API_KEY=sk-ant-...
 
-# 3. First-time setup (creates ~/.lexagent/SOUL.md)
-python -m lexagent.cli setup
+# 3. First-time setup (creates ~/.themis/SOUL.md)
+python -m themis.cli setup
 
 # 4. Draft your first document
-python -m lexagent.cli draft "writ petition Delhi HC wrongful termination Article 21"
+python -m themis.cli draft "writ petition Delhi HC wrongful termination Article 21"
 
 # 5. Run the test suite
 pytest tests/ -v
@@ -100,7 +100,7 @@ pytest tests/ -v
 | `LEX_QDRANT_ENABLED` | `false` | Persistent vector retrieval |
 | `LEX_VOICE_ENABLED` | `false` | Voice gateway |
 
-All config lives in `lexagent/config.py` as `LexConfig(BaseSettings)`.
+All config lives in `themis/config.py` as `LexConfig(BaseSettings)`.
 
 ---
 
@@ -108,9 +108,9 @@ All config lives in `lexagent/config.py` as `LexConfig(BaseSettings)`.
 
 | Gateway | How to start |
 |---|---|
-| CLI | `python -m lexagent.cli draft "..."` |
-| Telegram bot | `python -m lexagent.cli gateway telegram` |
-| Control plane (REST + WebSocket) | `python -m lexagent.gateway.control_plane` |
+| CLI | `python -m themis.cli draft "..."` |
+| Telegram bot | `python -m themis.cli gateway telegram` |
+| Control plane (REST + WebSocket) | `python -m themis.gateway.control_plane` |
 | Voice (browser WebSocket) | Connect to `ws://host:8000/voice/ws/{session_id}` |
 | Voice (Twilio phone) | Configure Twilio webhook to `POST /voice/incoming` |
 
@@ -122,16 +122,16 @@ All gateways funnel into the same FastAPI control plane. Matter state is shared 
 
 | Layer | Location | What it stores |
 |---|---|---|
-| SOUL.md | `~/.lexagent/SOUL.md` | Lawyer identity, bar details, drafting style |
-| Matter memory | `~/.lexagent/matters/{id}/MEMORY.md` | Per-matter state snapshots (human-readable) |
-| Session history | `~/.lexagent/sessions.db` | Searchable SQLite log with FTS5 |
+| SOUL.md | `~/.themis/SOUL.md` | Lawyer identity, bar details, drafting style |
+| Matter memory | `~/.themis/matters/{id}/MEMORY.md` | Per-matter state snapshots (human-readable) |
+| Session history | `~/.themis/sessions.db` | Searchable SQLite log with FTS5 |
 | LangGraph checkpoints | Postgres | Full agent state per node — resumable after crash |
 
 ---
 
 ## Skills System
 
-Skills are `.md` files with YAML frontmatter. Dropping a file into `~/.lexagent/skills/` creates a custom skill — no code required.
+Skills are `.md` files with YAML frontmatter. Dropping a file into `~/.themis/skills/` creates a custom skill — no code required.
 
 ```yaml
 ---
@@ -164,7 +164,7 @@ Bundled skills: civil litigation, criminal litigation, legal notice, contract re
 
 ## V3 Roadmap
 
-LexAgent is evolving into a persistent legal operating system — a **Living Matter Workspace** that works 24/7 on active matters:
+Themis is evolving into a persistent legal operating system — a **Living Matter Workspace** that works 24/7 on active matters:
 
 - Canonical matter workspace (Postgres-backed typed legal objects)
 - `lex worker` — background job runner for document processing, chronology building, research memos, risk analysis, morning briefs
@@ -174,7 +174,7 @@ LexAgent is evolving into a persistent legal operating system — a **Living Mat
 - LexMemory OS — layered working / matter / episodic / semantic / procedural / firm / lawyer memory
 - Learning loop — lawyer edits, accepted authorities, and feedback improve future drafts
 
-See [`LEXAGENT_OS_V3_ARCHITECTURE_ROADMAP.md`](LEXAGENT_OS_V3_ARCHITECTURE_ROADMAP.md) for the full plan.
+See [`THEMIS_OS_V3_ARCHITECTURE_ROADMAP.md`](THEMIS_OS_V3_ARCHITECTURE_ROADMAP.md) for the full plan.
 
 ---
 
@@ -191,7 +191,7 @@ CODEX Phase 1 complete: matter workspace primitives, runtime models (jobs/runs/s
 ## Project Structure
 
 ```
-lexagent/
+themis/
   cli.py              # Typer CLI entry point
   graph.py            # LangGraph StateGraph definition
   state.py            # LexState TypedDict

@@ -1,6 +1,6 @@
-"""Tests for Matter Workspace Pydantic models — lexagent/workspace/models.py."""
+"""Tests for Matter Workspace Pydantic models — themis/workspace/models.py."""
 import pytest
-from lexagent.workspace.models import (
+from themis.workspace.models import (
     Authority,
     ChronologyItem,
     Deadline,

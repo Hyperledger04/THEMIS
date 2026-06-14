@@ -7,7 +7,7 @@ import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.graph.message import add_messages
 
-from lexagent.state import LexState
+from themis.state import LexState
 
 
 def _minimal_state() -> LexState:

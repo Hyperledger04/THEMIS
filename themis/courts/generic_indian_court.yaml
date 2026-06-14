@@ -1,0 +1,57 @@
+# Generic Indian Court — fallback spec used when no court-specific YAML matches.
+#
+# Formatting based on actual filed COMPLAINT-138 NI ACT reference document:
+#   Bookman Old Style 14pt, 1" all margins, legal paper (8.5x14"), single-spaced.
+# This is the standard district / magistrate court style across most Indian states.
+#
+# A lawyer who practices in High Courts should set  formatting_style: high_court
+# in their SOUL.md (set at lex setup) — that overrides these formatting values
+# while keeping the structural rules below unchanged.
+
+court_id: generic_indian_court
+display_name: "Indian Court (Generic)"
+
+# Empty — this spec matches everything that has no better match.
+# It is the fallback, not a targeted spec.
+jurisdiction_keywords: []
+matter_types: []
+
+formatting:
+  paper: Legal              # 8.5" x 14" — standard Indian district court paper
+  margins:
+    left_inches: 1.0
+    right_inches: 1.0
+    top_inches: 1.0
+    bottom_inches: 1.0
+  font_name: "Bookman Old Style"
+  font_size_pt: 14
+  line_spacing: single      # single | 1.5x | double
+  para_numbering: arabic
+  heading_style: bold_centered
+
+# Minimum sections required across all matter types.
+# Court-specific YAMLs (cjm_s138_complaint.yaml etc.) add matter-specific P0 checks.
+# WHY: generic fallback imposes NO mandatory sections. It is a catch-all for
+# matter types without a dedicated YAML. Structural P0 checks for those types
+# come from the _REQUIRED_SECTIONS supplement in review.py, not from this spec.
+mandatory_sections: []
+
+# WHY: no recommended sections either — matter-specific YAMLs define their own.
+recommended_sections: []
+
+section_order:
+  - TITLE_BLOCK
+  - PARTIES
+  - FACTS_IN_BRIEF
+  - PRAYER
+  - VERIFICATION
+
+annexures:
+  format: "ANNEXURE {n}"
+
+party_labels:
+  filer: "Petitioner"
+  opposing: "Respondent"
+
+stamp_paper: false
+filing_fee_note: false

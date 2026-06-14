@@ -15,7 +15,7 @@ from fastapi.testclient import TestClient
 @pytest.fixture()
 def client():
     """TestClient wrapping the control plane FastAPI app (includes voice router)."""
-    from lexagent.gateway.control_plane import app
+    from themis.gateway.control_plane import app
     return TestClient(app)
 
 
@@ -43,12 +43,12 @@ def test_twilio_incoming_returns_twiml(client):
     body = resp.text
     assert "<Response>" in body
     assert "<Gather" in body
-    assert "LexAgent" in body
+    assert "Themis" in body
 
 
 def test_twilio_incoming_creates_session(client):
     """Each unique CallSid should create a new VoiceSession."""
-    from lexagent.voice.session import get_voice_session_store
+    from themis.voice.session import get_voice_session_store
     store = get_voice_session_store()
     initial_count = len(store)
 
@@ -81,7 +81,7 @@ def test_twilio_gather_with_speech_runs_graph(client, monkeypatch):
         return "Which court are you filing in?"
 
     monkeypatch.setattr(
-        "lexagent.gateway.voice._run_voice_turn",
+        "themis.gateway.voice._run_voice_turn",
         mock_turn,
     )
 
@@ -105,7 +105,7 @@ def test_voice_client_page_serves_html(client):
     resp = client.get("/voice/client")
     assert resp.status_code == 200
     assert "text/html" in resp.headers["content-type"]
-    assert "LexAgent Voice" in resp.text
+    assert "Themis Voice" in resp.text
     assert "mic-btn" in resp.text
 
 
@@ -116,10 +116,10 @@ def test_voice_websocket_connect_and_greeting(monkeypatch):
     async def mock_turn(session, user_text, cfg):
         return "Please describe your matter."
 
-    from lexagent.gateway import voice as voice_module
+    from themis.gateway import voice as voice_module
     monkeypatch.setattr(voice_module, "_run_voice_turn", mock_turn)
 
-    from lexagent.gateway.control_plane import app
+    from themis.gateway.control_plane import app
     with TestClient(app) as client:
         with client.websocket_connect("/voice/ws/test-session-greeting") as ws:
             # First message must be the matter_id handshake
@@ -147,10 +147,10 @@ def test_voice_websocket_text_message(monkeypatch):
         session.turn_count += 1
         return f"Got: {user_text}"
 
-    from lexagent.gateway import voice as voice_module
+    from themis.gateway import voice as voice_module
     monkeypatch.setattr(voice_module, "_run_voice_turn", mock_turn)
 
-    from lexagent.gateway.control_plane import app
+    from themis.gateway.control_plane import app
     with TestClient(app) as client:
         with client.websocket_connect("/voice/ws/test-text-session") as ws:
             # Consume matter_id handshake

@@ -1,7 +1,7 @@
-"""Tests for AES-256-GCM encryption — lexagent/security/crypto.py."""
+"""Tests for AES-256-GCM encryption — themis/security/crypto.py."""
 import os
 import pytest
-from lexagent.security.crypto import (
+from themis.security.crypto import (
     _derive_key,
     decrypt_bytes,
     decrypt_str,
@@ -33,7 +33,7 @@ class TestDeriveKey:
 
 class TestEncryptDecryptBytes:
     def test_roundtrip(self):
-        pt = b"LexAgent NI Act Section 138 complaint"
+        pt = b"Themis NI Act Section 138 complaint"
         ct = encrypt_bytes(pt, MASTER_KEY, FIRM_A)
         assert decrypt_bytes(ct, MASTER_KEY, FIRM_A) == pt
 

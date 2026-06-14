@@ -1,9 +1,9 @@
-"""Tests for agent runtime models and worker — lexagent/runtime/."""
+"""Tests for agent runtime models and worker — themis/runtime/."""
 import asyncio
 import pytest
 from unittest.mock import MagicMock, patch
 
-from lexagent.runtime.models import (
+from themis.runtime.models import (
     AgentApproval,
     AgentArtifact,
     AgentJob,
@@ -13,7 +13,7 @@ from lexagent.runtime.models import (
     AgentToolCall,
     RuntimeEvent,
 )
-from lexagent.runtime.worker import RuntimeWorker, register_handler
+from themis.runtime.worker import RuntimeWorker, register_handler
 
 
 class TestAgentRun:

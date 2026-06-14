@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-LexAgent is an open-source AI agent for Indian litigation practice — built on LangGraph. It takes a matter brief from a lawyer, asks clarifying questions, researches Indian case law, drafts a court-ready document with verified citations, and saves the matter to memory.
+Themis is an open-source AI agent for Indian litigation practice — built on LangGraph. It takes a matter brief from a lawyer, asks clarifying questions, researches Indian case law, drafts a court-ready document with verified citations, and saves the matter to memory.
 
 **This is a teaching build. Every non-obvious code pattern gets a comment. Optimise for clarity over cleverness.**
 
@@ -16,13 +16,13 @@ Python 3.11+, LangGraph ≥0.2, LangChain Core, Typer CLI, Pydantic Settings, SQ
 
 ```bash
 uv sync                         # Install dependencies
-python -m lexagent.cli draft "..."  # Run the agent
-lex draft "matter brief"        # After pip install lexagent
+python -m themis.cli draft "..."  # Run the agent
+lex draft "matter brief"        # After pip install themis
 lex setup                       # First-run wizard (creates SOUL.md)
 pytest tests/ -v                # Run all tests
 pytest tests/test_state.py -v   # Run single test file
-mypy lexagent/                  # Type check
-ruff check lexagent/            # Lint
+mypy themis/                  # Type check
+ruff check themis/            # Lint
 ```
 
 ## Architecture
@@ -39,7 +39,7 @@ intake → research → draft → cite (optional) → review → END
 
 `graph.py` exports `build_graph()` which compiles and returns the runnable graph. Invoke with `graph.invoke(initial_state)` or `graph.astream(initial_state)` for streaming.
 
-### LexState (`lexagent/state.py`)
+### LexState (`themis/state.py`)
 
 The `TypedDict` that flows through every node. Key fields:
 - `user_input`, `matter_id`, `matter_type`, `parties`, `jurisdiction`, `purpose` — intake fields
@@ -52,7 +52,7 @@ The `TypedDict` that flows through every node. Key fields:
 
 ### Node Contract
 
-Every node in `lexagent/nodes/` must follow:
+Every node in `themis/nodes/` must follow:
 ```python
 async def run(state: LexState) -> dict:
     try:
@@ -62,9 +62,9 @@ async def run(state: LexState) -> dict:
 ```
 Nodes never store state internally. They never raise — catch everything and set `state["error"]`.
 
-### Tool Registry (`lexagent/tools/registry.py`)
+### Tool Registry (`themis/tools/registry.py`)
 
-Tools self-register via decorator. Adding a tool = dropping a file in `lexagent/tools/`.
+Tools self-register via decorator. Adding a tool = dropping a file in `themis/tools/`.
 
 ```python
 @ToolRegistry.register(name="tool_name", description="...", schema={...})
@@ -74,17 +74,17 @@ def my_tool(...) -> dict:
 
 `ToolRegistry.get_langchain_tools()` returns tools in LangChain format for `bind_tools()`.
 
-### Skills System (`lexagent/skills/`)
+### Skills System (`themis/skills/`)
 
-Skills are `.md` files with YAML frontmatter (`name`, `trigger_keywords`, `matter_types`). The loader in `lexagent/skills/loader.py` scans the directory, matches by trigger keywords, and returns the relevant skill content for injection into the system prompt. Lawyers can write skills in a text editor — no code required.
+Skills are `.md` files with YAML frontmatter (`name`, `trigger_keywords`, `matter_types`). The loader in `themis/skills/loader.py` scans the directory, matches by trigger keywords, and returns the relevant skill content for injection into the system prompt. Lawyers can write skills in a text editor — no code required.
 
 ### Memory System
 
-- `~/.lexagent/SOUL.md` — lawyer identity, bar details, drafting style preferences
-- `~/.lexagent/matters/{matter_id}/MEMORY.md` — per-matter running memory
-- `~/.lexagent/sessions.db` — SQLite with FTS5 for session history
+- `~/.themis/SOUL.md` — lawyer identity, bar details, drafting style preferences
+- `~/.themis/matters/{matter_id}/MEMORY.md` — per-matter running memory
+- `~/.themis/sessions.db` — SQLite with FTS5 for session history
 
-### Config (`lexagent/config.py`)
+### Config (`themis/config.py`)
 
 All configurable values in `LexConfig(BaseSettings)`. Never hardcode model names, API keys, or paths outside this class. Every field here maps to a future BYOK frontend UI control.
 
@@ -93,7 +93,7 @@ All configurable values in `LexConfig(BaseSettings)`. Never hardcode model names
 1. Add `# LANGGRAPH:` comment the **first time** any LangGraph pattern appears (e.g., first `add_conditional_edges`, first `bind_tools`, first `checkpointer`)
 2. Add `# WHY:` comment on any non-obvious decision or constraint
 3. Use `rich` for all CLI output — never `print()`
-4. All system prompts in `lexagent/prompts/` — never inline strings
+4. All system prompts in `themis/prompts/` — never inline strings
 5. All config in `LexConfig` — never hardcode model names or paths
 6. Use `pyproject.toml` with uv — no `requirements.txt`
 7. Write the test first, then the implementation. Run `pytest` after every file change.
@@ -107,7 +107,7 @@ All configurable values in `LexConfig(BaseSettings)`. Never hardcode model names
 
 ## Build Sequence
 
-Phases are sequential — complete and test each before starting the next. See `LEXAGENT_CLAUDE_CODE_BRIEF.md` §13 for full phase details.
+Phases are sequential — complete and test each before starting the next. See `THEMIS_CLAUDE_CODE_BRIEF.md` §13 for full phase details.
 
 | Phase | Focus | Key Checkpoint |
 |---|---|---|

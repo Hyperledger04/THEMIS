@@ -1,9 +1,9 @@
-"""Tests for lexagent/contract/models.py — PlaybookSpec, PositionResult, PlaybookExecution."""
+"""Tests for themis/contract/models.py — PlaybookSpec, PositionResult, PlaybookExecution."""
 from __future__ import annotations
 
 import pytest
 
-from lexagent.contract.models import (
+from themis.contract.models import (
     PlaybookExecution,
     PlaybookPosition,
     PlaybookSpec,

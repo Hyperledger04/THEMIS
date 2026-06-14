@@ -1,4 +1,4 @@
-"""Tests for lexagent/ingestion/extractors.py — LLM extraction pipeline."""
+"""Tests for themis/ingestion/extractors.py — LLM extraction pipeline."""
 from __future__ import annotations
 
 import json
@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from lexagent.ingestion.documents import PageText
-from lexagent.ingestion.extractors import (
+from themis.ingestion.documents import PageText
+from themis.ingestion.extractors import (
     ExtractionResult,
     _build_excerpt_index,
     _coerce_deadline_type,
@@ -18,7 +18,7 @@ from lexagent.ingestion.extractors import (
     extract_from_pages,
     persist_extraction,
 )
-from lexagent.workspace.models import Party, SourceAnchor
+from themis.workspace.models import Party, SourceAnchor
 
 
 # ---------------------------------------------------------------------------

@@ -1,0 +1,79 @@
+# Sessions Court — Bail Application (S.439 CrPC / S.483 BNSS)
+#
+# Structural rules specific to sessions bail applications:
+#   - Antecedents paragraph is P0 (prior convictions / clean record must be stated)
+#   - Grounds for bail must be explicitly numbered
+#   - Nature of accusation paragraph is P0 (states FIR details, sections, police station)
+#   - Surety offer paragraph is recommended (courts expect it even at bail stage)
+#   - No exhibit format — documents are filed as "true copy annexed herewith"
+#   - Prayer asks specifically for bail with conditions, not conviction/acquittal
+
+court_id: sessions_bail_application
+display_name: "Sessions Court — Bail Application (S.439 CrPC / S.483 BNSS)"
+
+jurisdiction_keywords:
+  - sessions court
+  - sessions judge
+  - additional sessions judge
+  - asj
+  - district and sessions
+  - special court
+
+matter_types:
+  - bail_application
+  - bail
+  - s439
+  - s483
+  - anticipatory_bail
+  - regular_bail
+  - default_bail
+
+formatting:
+  paper: Legal
+  margins:
+    left_inches: 1.0
+    right_inches: 1.0
+    top_inches: 1.0
+    bottom_inches: 1.0
+  font_name: "Bookman Old Style"
+  font_size_pt: 14
+  line_spacing: single
+  para_numbering: arabic
+  heading_style: bold_centered
+
+mandatory_sections:
+  - TITLE_BLOCK
+  - PARTIES               # Accused / Applicant vs. State
+  - NATURE_OF_ACCUSATION  # FIR number, police station, sections charged
+  - FACTS_IN_BRIEF
+  - ANTECEDENTS           # prior convictions or clean record — P0
+  - GROUNDS_FOR_BAIL      # numbered grounds: parity, cooperation, roots in society...
+  - PRAYER                # bail with / without conditions
+  - VERIFICATION
+
+recommended_sections:
+  - CUSTODY_PERIOD        # how long accused has been in custody
+  - SURETY_OFFER          # surety details and personal bond amount
+  - INVESTIGATION_STATUS  # whether chargesheet filed / investigation complete
+
+section_order:
+  - TITLE_BLOCK
+  - PARTIES
+  - NATURE_OF_ACCUSATION
+  - FACTS_IN_BRIEF
+  - ANTECEDENTS
+  - CUSTODY_PERIOD
+  - GROUNDS_FOR_BAIL
+  - SURETY_OFFER
+  - PRAYER
+  - VERIFICATION
+
+annexures:
+  format: "ANNEXURE {alpha}"
+
+party_labels:
+  filer: "Accused/Applicant"
+  opposing: "State"
+
+stamp_paper: false
+filing_fee_note: false

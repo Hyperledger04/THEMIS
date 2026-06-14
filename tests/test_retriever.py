@@ -1,7 +1,7 @@
-"""Tests for lexagent/tools/retriever.py"""
+"""Tests for themis/tools/retriever.py"""
 import pytest
-from lexagent.tools.chunker import Chunk
-from lexagent.tools.retriever import HybridRetriever, RetrievalResult
+from themis.tools.chunker import Chunk
+from themis.tools.retriever import HybridRetriever, RetrievalResult
 
 
 _SAMPLE_FINDINGS = [
@@ -132,7 +132,7 @@ def test_persistent_qdrant_retriever_passes_score_threshold_to_query_points(monk
     """CRIT-01: retrieve() must forward score_threshold to query_points so
     low-similarity Qdrant results never enter the cite node corpus."""
     from unittest.mock import MagicMock
-    from lexagent.tools.retriever import PersistentQdrantRetriever
+    from themis.tools.retriever import PersistentQdrantRetriever
 
     # Build a minimal cfg with the threshold we want to assert.
     cfg = MagicMock()

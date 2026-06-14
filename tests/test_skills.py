@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from lexagent.skills.loader import load_skill, _parse_frontmatter, _skills_from_dir
+from themis.skills.loader import load_skill, _parse_frontmatter, _skills_from_dir
 
 
 # ---------------------------------------------------------------------------
@@ -86,7 +86,7 @@ def bundled_skills_dir(tmp_path):
 
 @pytest.fixture()
 def user_skills_dir(tmp_path):
-    """A temporary directory acting as ~/.lexagent/skills (user-editable)."""
+    """A temporary directory acting as ~/.themis/skills (user-editable)."""
     d = tmp_path / "user"
     d.mkdir()
     return d

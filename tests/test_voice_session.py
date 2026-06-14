@@ -2,7 +2,7 @@
 
 import pytest
 
-from lexagent.voice.session import VoiceSession, VoiceSessionStore, get_voice_session_store
+from themis.voice.session import VoiceSession, VoiceSessionStore, get_voice_session_store
 
 
 # ─── VoiceSession ────────────────────────────────────────────────────────────

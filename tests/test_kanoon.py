@@ -5,8 +5,8 @@ Run with: pytest tests/test_kanoon.py -v
 """
 
 import pytest
-from lexagent.tools.kanoon import search_and_fetch
-from lexagent.tools.kanoon_utils import fix_doc_url
+from themis.tools.kanoon import search_and_fetch
+from themis.tools.kanoon_utils import fix_doc_url
 
 
 # ---------------------------------------------------------------------------

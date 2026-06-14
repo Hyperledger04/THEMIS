@@ -18,8 +18,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from lexagent.config import LexConfig
-from lexagent.gateway.anonymizer import LegalAnonymizer
+from themis.config import LexConfig
+from themis.gateway.anonymizer import LegalAnonymizer
 
 
 # ---------------------------------------------------------------------------
@@ -125,7 +125,7 @@ def test_court_names_not_anonymized():
     Court names in the whitelist must survive anonymization unchanged.
     We test the whitelist set directly since Presidio is mocked.
     """
-    from lexagent.gateway.recognizers import INDIAN_COURT_WHITELIST
+    from themis.gateway.recognizers import INDIAN_COURT_WHITELIST
     assert "Supreme Court of India" in INDIAN_COURT_WHITELIST
     assert "Delhi High Court" in INDIAN_COURT_WHITELIST
     assert "National Company Law Tribunal" in INDIAN_COURT_WHITELIST
@@ -134,7 +134,7 @@ def test_court_names_not_anonymized():
 def test_case_number_regex():
     """Indian case number patterns match the regex."""
     import re
-    from lexagent.gateway.recognizers import _CASE_NUMBER_RE
+    from themis.gateway.recognizers import _CASE_NUMBER_RE
 
     cases = [
         "W.P. 1234/2024",
@@ -149,8 +149,8 @@ def test_case_number_regex():
 
 
 def test_matter_id_regex():
-    """LexAgent matter IDs match the regex."""
-    from lexagent.gateway.recognizers import _MATTER_ID_RE
+    """Themis matter IDs match the regex."""
+    from themis.gateway.recognizers import _MATTER_ID_RE
     assert _MATTER_ID_RE.search("matter_abc12345")
     assert not _MATTER_ID_RE.search("matter_ab")  # too short
 
@@ -172,9 +172,9 @@ async def test_gateway_disabled_calls_litellm_directly():
     fake_response.usage.prompt_tokens = 10
     fake_response.usage.completion_tokens = 20
 
-    with patch("lexagent.gateway.inference.litellm.acompletion", new_callable=AsyncMock) as mock_llm:
+    with patch("themis.gateway.inference.litellm.acompletion", new_callable=AsyncMock) as mock_llm:
         mock_llm.return_value = fake_response
-        from lexagent.gateway.inference import InferenceGateway
+        from themis.gateway.inference import InferenceGateway
         gw = InferenceGateway()
         result = await gw.call(messages, cfg, matter_id=None, is_document_context=False)
 
@@ -202,9 +202,9 @@ async def test_gateway_is_document_context_bypasses_anonymization(mock_presidio)
     analyzer, _ = mock_presidio
     analyzer.analyze.reset_mock()
 
-    with patch("lexagent.gateway.inference.litellm.acompletion", new_callable=AsyncMock) as mock_llm:
+    with patch("themis.gateway.inference.litellm.acompletion", new_callable=AsyncMock) as mock_llm:
         mock_llm.return_value = fake_response
-        from lexagent.gateway.inference import InferenceGateway
+        from themis.gateway.inference import InferenceGateway
         gw = InferenceGateway()
         # Bypass LegalAnonymizer loading entirely for this test
         gw._anonymizer = MagicMock()
@@ -233,9 +233,9 @@ async def test_gateway_privileged_matter_bypasses_anonymization():
     fake_response.usage.prompt_tokens = 5
     fake_response.usage.completion_tokens = 1
 
-    with patch("lexagent.gateway.inference.litellm.acompletion", new_callable=AsyncMock) as mock_llm:
+    with patch("themis.gateway.inference.litellm.acompletion", new_callable=AsyncMock) as mock_llm:
         mock_llm.return_value = fake_response
-        from lexagent.gateway.inference import InferenceGateway
+        from themis.gateway.inference import InferenceGateway
         gw = InferenceGateway()
         gw._anonymizer = MagicMock()
         result = await gw.call(
@@ -265,7 +265,7 @@ async def test_gateway_enabled_anonymizes_then_restores(mock_presidio):
     fake_response.usage.prompt_tokens = 10
     fake_response.usage.completion_tokens = 8
 
-    with patch("lexagent.gateway.inference.litellm.acompletion", new_callable=AsyncMock) as mock_llm:
+    with patch("themis.gateway.inference.litellm.acompletion", new_callable=AsyncMock) as mock_llm:
         mock_llm.return_value = fake_response
 
         # Inject a controlled anonymizer that returns predictable pseudonyms
@@ -276,7 +276,7 @@ async def test_gateway_enabled_anonymizes_then_restores(mock_presidio):
         )
         mock_anon.restore.return_value = "I see Rahul Sharma is the plaintiff."
 
-        from lexagent.gateway.inference import InferenceGateway
+        from themis.gateway.inference import InferenceGateway
         gw = InferenceGateway()
         gw._anonymizer = mock_anon
 
@@ -299,21 +299,21 @@ async def test_gateway_enabled_anonymizes_then_restores(mock_presidio):
 # ---------------------------------------------------------------------------
 
 def test_should_anonymize_disabled():
-    from lexagent.gateway.inference import InferenceGateway
+    from themis.gateway.inference import InferenceGateway
     gw = InferenceGateway()
     cfg = _make_cfg(anonymization_enabled=False)
     assert gw._should_anonymize(cfg, matter_id=None, is_document_context=False) is False
 
 
 def test_should_anonymize_document_context():
-    from lexagent.gateway.inference import InferenceGateway
+    from themis.gateway.inference import InferenceGateway
     gw = InferenceGateway()
     cfg = _make_cfg(anonymization_enabled=True)
     assert gw._should_anonymize(cfg, matter_id=None, is_document_context=True) is False
 
 
 def test_should_anonymize_privileged_matter():
-    from lexagent.gateway.inference import InferenceGateway
+    from themis.gateway.inference import InferenceGateway
     gw = InferenceGateway()
     cfg = _make_cfg(
         anonymization_enabled=True,
@@ -323,7 +323,7 @@ def test_should_anonymize_privileged_matter():
 
 
 def test_should_anonymize_normal_case():
-    from lexagent.gateway.inference import InferenceGateway
+    from themis.gateway.inference import InferenceGateway
     gw = InferenceGateway()
     cfg = _make_cfg(anonymization_enabled=True)
     assert gw._should_anonymize(cfg, matter_id="matter_norm01", is_document_context=False) is True

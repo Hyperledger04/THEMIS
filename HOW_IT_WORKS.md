@@ -1,13 +1,13 @@
-# How LexAgent Works
+# How Themis Works
 ### A Plain-English Guide for Lawyers and Developers
 
 ---
 
-## Section 1: What Is LexAgent?
+## Section 1: What Is Themis?
 
-LexAgent is an open-source AI assistant built specifically for legal practice in India — and increasingly, for lawyers globally. The problem it solves is a simple but painful one: drafting a court-ready legal document (a writ petition, an injunction application, a legal notice) currently takes hours of manual research and writing. A lawyer must recall or look up the right statutes, find relevant Supreme Court and High Court judgments, check limitation periods, and then assemble everything into a properly structured document. One mistake — a wrong citation, an expired limitation period — can sink a client's case.
+Themis is an open-source AI assistant built specifically for legal practice in India — and increasingly, for lawyers globally. The problem it solves is a simple but painful one: drafting a court-ready legal document (a writ petition, an injunction application, a legal notice) currently takes hours of manual research and writing. A lawyer must recall or look up the right statutes, find relevant Supreme Court and High Court judgments, check limitation periods, and then assemble everything into a properly structured document. One mistake — a wrong citation, an expired limitation period — can sink a client's case.
 
-LexAgent automates the research-and-draft pipeline. A lawyer describes their matter in plain language ("I need to file a writ petition in Delhi HC for wrongful termination under Article 21"), and the agent asks targeted clarifying questions, searches Indian Kanoon for verified case law citations, checks the applicable limitation period, and produces a full court-ready draft with footnotes. The draft arrives as formatted text in the conversation and as a downloadable `.docx` file.
+Themis automates the research-and-draft pipeline. A lawyer describes their matter in plain language ("I need to file a writ petition in Delhi HC for wrongful termination under Article 21"), and the agent asks targeted clarifying questions, searches Indian Kanoon for verified case law citations, checks the applicable limitation period, and produces a full court-ready draft with footnotes. The draft arrives as formatted text in the conversation and as a downloadable `.docx` file.
 
 This project is a teaching build as much as a production tool. Every non-obvious code pattern carries an explanatory comment, and every design decision is documented. The goal is a codebase any lawyer-turned-developer, or developer new to legal tech, can understand and extend.
 
@@ -94,7 +94,7 @@ Key fields in `LexState`:
 
 ---
 
-## Section 4: The Gateways — How Lawyers Talk to LexAgent
+## Section 4: The Gateways — How Lawyers Talk to Themis
 
 All gateways funnel into one place: the **Control Plane**, a FastAPI backend that runs the LangGraph agent. Gateways are thin adapters — their only job is to translate an incoming message (a Telegram text, a phone call, an HTTP POST) into a standard API call to the control plane, and translate the response back to the appropriate format.
 
@@ -117,21 +117,21 @@ The Control Plane also exposes:
 
 ---
 
-## Section 5: Memory — How LexAgent Remembers
+## Section 5: Memory — How Themis Remembers
 
-LexAgent has four layers of memory, each serving a different purpose:
+Themis has four layers of memory, each serving a different purpose:
 
 **Layer 1 — SOUL.md (permanent lawyer identity)**
 
-Located at `~/.lexagent/SOUL.md`. This file is created during the first-run setup wizard (`lex setup`) and contains the lawyer's name, bar council enrollment number, preferred courts, drafting style preferences, and any custom instructions. Every time the agent drafts a document, it loads SOUL.md and injects it into the system prompt. This is how the agent knows to say "Brahm Sareen, Advocate" in the signature block without being told each time.
+Located at `~/.themis/SOUL.md`. This file is created during the first-run setup wizard (`lex setup`) and contains the lawyer's name, bar council enrollment number, preferred courts, drafting style preferences, and any custom instructions. Every time the agent drafts a document, it loads SOUL.md and injects it into the system prompt. This is how the agent knows to say "Brahm Sareen, Advocate" in the signature block without being told each time.
 
 **Layer 2 — MEMORY.md per matter**
 
-Located at `~/.lexagent/matters/{matter_id}/MEMORY.md`. Every time a matter session ends, the agent appends a snapshot of the matter state (type, parties, jurisdiction, research findings, draft status) to this file. On resumption, the agent reads MEMORY.md and picks up where it left off. This is human-readable — a lawyer can open it in any text editor.
+Located at `~/.themis/matters/{matter_id}/MEMORY.md`. Every time a matter session ends, the agent appends a snapshot of the matter state (type, parties, jurisdiction, research findings, draft status) to this file. On resumption, the agent reads MEMORY.md and picks up where it left off. This is human-readable — a lawyer can open it in any text editor.
 
 **Layer 3 — SQLite sessions.db (searchable session history)**
 
-Located at `~/.lexagent/sessions.db`. Every completed session is logged here with full-text search (SQLite FTS5). The lawyer can run `lex search "property dispute"` to find past matters, or `lex matter list` to see all matters in reverse chronological order. Reminders and deadlines are also stored here.
+Located at `~/.themis/sessions.db`. Every completed session is logged here with full-text search (SQLite FTS5). The lawyer can run `lex search "property dispute"` to find past matters, or `lex matter list` to see all matters in reverse chronological order. Reminders and deadlines are also stored here.
 
 **Layer 4 — LangGraph Postgres Checkpointer (full agent state)**
 
@@ -148,7 +148,7 @@ In development mode without Postgres, LangGraph uses an in-memory `MemorySaver` 
 
 Different types of legal documents require completely different structures. A bail application has different mandatory sections than a writ petition. An injunction application needs different intake questions than a legal notice. The Skills system solves this without any code changes.
 
-**Skills are Markdown files** stored in `lexagent/skills/` (bundled) and optionally in `~/.lexagent/skills/` (lawyer-custom overrides). Each file has a YAML frontmatter block at the top:
+**Skills are Markdown files** stored in `themis/skills/` (bundled) and optionally in `~/.themis/skills/` (lawyer-custom overrides). Each file has a YAML frontmatter block at the top:
 
 ```yaml
 ---
@@ -162,7 +162,7 @@ The rest of the file is the skill content: mandatory intake checklist, document 
 
 **Automatic skill selection:** The skills loader scans the trigger keywords against the lawyer's matter brief and the detected matter type. If the brief mentions "injunction," the civil litigation skill is loaded automatically. If it mentions "bail" or "custody," the criminal litigation skill is loaded. If no skill matches, the agent uses a generic drafting style.
 
-**Lawyers can write their own skills.** Creating a new skill = creating a `.md` file with YAML frontmatter in `~/.lexagent/skills/`. A lawyer who handles arbitration cases can write an `arbitration.md` skill with their firm's preferred SIAC/DIAC structure. No Python required. User skills override bundled skills with the same name.
+**Lawyers can write their own skills.** Creating a new skill = creating a `.md` file with YAML frontmatter in `~/.themis/skills/`. A lawyer who handles arbitration cases can write an `arbitration.md` skill with their firm's preferred SIAC/DIAC structure. No Python required. User skills override bundled skills with the same name.
 
 **Bundled skills include:** civil litigation, criminal litigation, legal notices, contract review, and starter skills for argument patterns, plain-English summaries, and drafting style.
 
@@ -170,7 +170,7 @@ The rest of the file is the skill content: mandatory intake checklist, document 
 
 ## Section 7: Tools — What the Agent Can Look Up
 
-Tools are functions the agent can call during the research phase. They self-register via a decorator — adding a new tool means dropping a new file into `lexagent/tools/` and decorating the function:
+Tools are functions the agent can call during the research phase. They self-register via a decorator — adding a new tool means dropping a new file into `themis/tools/` and decorating the function:
 
 ```python
 @ToolRegistry.register(name="my_tool", description="...", schema={...})
@@ -257,7 +257,7 @@ The registry converts registered tools into LangChain format automatically, maki
 - **Cron engine**: morning brief (daily matter digest), hearing radar (e-courts deadline scan), research queue (background research jobs)
 - **Web UI pages** in lexanodes/: SOUL editor, firm registration, BYOK key management, matter dashboard
 - **Telegram → Control Plane refactor**: Telegram currently calls `get_graph()` directly; roadmap moves it to POST to the control plane like all other gateways
-- **LawyerSoul DB model hookup**: SOUL data currently lives in `~/.lexagent/SOUL.md`; the Prisma model exists but is not yet wired to the graph
+- **LawyerSoul DB model hookup**: SOUL data currently lives in `~/.themis/SOUL.md`; the Prisma model exists but is not yet wired to the graph
 - **Multi-tenant enforcement**: `multi_tenant` flag exists in config but is not yet enforced in routing
 
 ---
@@ -274,11 +274,11 @@ uv sync
 cp .env.example .env
 # Open .env and set: ANTHROPIC_API_KEY=sk-ant-...
 
-# 3. Run the first-time setup wizard (creates ~/.lexagent/SOUL.md)
-python -m lexagent.cli setup
+# 3. Run the first-time setup wizard (creates ~/.themis/SOUL.md)
+python -m themis.cli setup
 
 # 4. Draft your first document
-python -m lexagent.cli draft "I need to file a writ petition in Delhi HC challenging wrongful termination under Article 21"
+python -m themis.cli draft "I need to file a writ petition in Delhi HC challenging wrongful termination under Article 21"
 
 # 5. Run the test suite to verify everything is working
 pytest tests/ -v
@@ -288,10 +288,10 @@ pytest tests/ -v
 
 ```bash
 # Start the Telegram bot
-python -m lexagent.cli gateway telegram
+python -m themis.cli gateway telegram
 
 # Start the full control plane (REST + WebSocket + Voice)
-python -m lexagent.gateway.control_plane
+python -m themis.gateway.control_plane
 
 # Install voice gateway dependencies
 uv sync --extra voice
@@ -313,8 +313,8 @@ docker run -p 6333:6333 qdrant/qdrant
 | `LEX_QDRANT_ENABLED` | `false` | Enable persistent vector retrieval |
 | `LEX_VOICE_ENABLED` | `false` | Enable the voice gateway |
 
-All configuration lives in `lexagent/config.py` as `LexConfig`. Every field maps directly to a `.env` variable, making it straightforward to deploy with environment-specific settings without touching code.
+All configuration lives in `themis/config.py` as `LexConfig`. Every field maps directly to a `.env` variable, making it straightforward to deploy with environment-specific settings without touching code.
 
 ---
 
-*This document covers the codebase as of Phase 8B (May 2026). For the full build specification and phase-by-phase implementation details, see `LEXAGENT_CLAUDE_CODE_BRIEF.md`. For the post-Phase 8B roadmap, see `POST_PHASE8B_IMPLEMENTATION_PLAN.md`.*
+*This document covers the codebase as of Phase 8B (May 2026). For the full build specification and phase-by-phase implementation details, see `THEMIS_CLAUDE_CODE_BRIEF.md`. For the post-Phase 8B roadmap, see `POST_PHASE8B_IMPLEMENTATION_PLAN.md`.*

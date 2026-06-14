@@ -1,7 +1,7 @@
-"""Tests for lexagent/tools/legal_kg.py"""
+"""Tests for themis/tools/legal_kg.py"""
 import pytest
 
-from lexagent.tools.legal_kg import (
+from themis.tools.legal_kg import (
     EntityType,
     LegalEntity,
     LegalKnowledgeGraph,
@@ -163,7 +163,7 @@ def test_kg_to_dict_structure():
 # -----------------------------------------------------------------------
 
 def test_save_and_load_entity_graph(tmp_path):
-    from lexagent.tools.legal_kg import save_entity_graph, load_entity_graph
+    from themis.tools.legal_kg import save_entity_graph, load_entity_graph
 
     db = str(tmp_path / "test_sessions.db")
     graph = {"entities": [{"name": "AIR 1978 SC 597", "type": "CITATION"}], "edges": []}
@@ -176,6 +176,6 @@ def test_save_and_load_entity_graph(tmp_path):
 
 
 def test_load_entity_graph_missing(tmp_path):
-    from lexagent.tools.legal_kg import load_entity_graph
+    from themis.tools.legal_kg import load_entity_graph
     result = load_entity_graph("NONEXISTENT", sessions_db=str(tmp_path / "no.db"))
     assert result is None

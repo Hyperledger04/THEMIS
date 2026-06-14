@@ -1,0 +1,80 @@
+# CJM / JMFC — General Criminal Complaint (non-NI Act)
+#
+# Covers: cheating (S.420), criminal breach of trust (S.406), forgery (S.467-471),
+# theft (S.379), mischief (S.427), and other IPC complaints filed directly before
+# the magistrate under S.200 CrPC / S.223 BNSS.
+#
+# Structurally different from S.138 complaints:
+#   - No limitation paragraph (CrPC has no fixed limitation for most IPC offences)
+#   - No exhibit format — documents annexed as "Annexure A, B, C"
+#   - Cognizance paragraph is P0 (must state basis for magistrate's jurisdiction)
+#   - No S.141 block
+
+court_id: cjm_criminal_complaint
+display_name: "CJM / JMFC — Criminal Complaint (IPC/BNS)"
+
+jurisdiction_keywords:
+  - cjm
+  - jmfc
+  - chief judicial magistrate
+  - judicial magistrate first class
+  - magistrate
+  - district court
+
+matter_types:
+  - criminal_complaint
+  - ipc_complaint
+  - bns_complaint
+  - cheating
+  - criminal_breach_of_trust
+  - forgery
+  - theft
+  - mischief
+  - crpc_complaint
+  - bnss_complaint
+
+formatting:
+  paper: Legal
+  margins:
+    left_inches: 1.0
+    right_inches: 1.0
+    top_inches: 1.0
+    bottom_inches: 1.0
+  font_name: "Bookman Old Style"
+  font_size_pt: 14
+  line_spacing: single
+  para_numbering: arabic
+  heading_style: bold_centered
+
+mandatory_sections:
+  - TITLE_BLOCK
+  - PARTIES
+  - FACTS_IN_BRIEF
+  - COGNIZANCE           # states which offence(s) and section(s); why magistrate has jurisdiction
+  - PRAYER               # directions to register FIR / take cognizance / issue summons
+  - VERIFICATION
+
+recommended_sections:
+  - CAUSE_OF_ACTION
+  - LIST_OF_DOCUMENTS
+  - PREVIOUS_COMPLAINTS  # discloses if any prior complaint filed on same facts
+
+section_order:
+  - TITLE_BLOCK
+  - PARTIES
+  - FACTS_IN_BRIEF
+  - CAUSE_OF_ACTION
+  - COGNIZANCE
+  - LIST_OF_DOCUMENTS
+  - PRAYER
+  - VERIFICATION
+
+annexures:
+  format: "ANNEXURE {alpha}"   # Annexure A, B, C
+
+party_labels:
+  filer: "Complainant"
+  opposing: "Accused"
+
+stamp_paper: false
+filing_fee_note: true

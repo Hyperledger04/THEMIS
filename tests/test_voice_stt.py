@@ -5,8 +5,8 @@
 
 import pytest
 
-from lexagent.voice.stt import StubSTT, WhisperSTT, DeepgramSTT, get_stt_backend, STTBackend
-from lexagent.config import LexConfig
+from themis.voice.stt import StubSTT, WhisperSTT, DeepgramSTT, get_stt_backend, STTBackend
+from themis.config import LexConfig
 
 
 # ─── StubSTT ────────────────────────────────────────────────────────────────

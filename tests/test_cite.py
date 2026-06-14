@@ -1,7 +1,7 @@
 """Tests for the cite node — citation extraction and cross-reference verification."""
 
 import pytest
-from lexagent.nodes.cite import _extract_citations, _verify_citations, run
+from themis.nodes.cite import _extract_citations, _verify_citations, run
 
 
 # ---------------------------------------------------------------------------
@@ -93,7 +93,7 @@ async def test_run_sets_citations_verified_true_when_all_verified(monkeypatch):
         def from_findings(cls, findings, **kwargs):
             return cls()
 
-    monkeypatch.setattr("lexagent.tools.retriever.HybridRetriever", _HighScoreRetriever)
+    monkeypatch.setattr("themis.tools.retriever.HybridRetriever", _HighScoreRetriever)
     findings = [{"full_text": "AIR 1978 SC 597", "header": "", "snippet": ""}]
     state = _state_with_draft("As per AIR 1978 SC 597, the law is clear.", findings)
     result = await run(state)
@@ -120,7 +120,7 @@ async def test_run_unverified_citations_is_none_when_all_verified(monkeypatch):
         def from_findings(cls, findings, **kwargs):
             return cls()
 
-    monkeypatch.setattr("lexagent.tools.retriever.HybridRetriever", _HighScoreRetriever)
+    monkeypatch.setattr("themis.tools.retriever.HybridRetriever", _HighScoreRetriever)
     findings = [{"full_text": "AIR 1978 SC 597", "header": "", "snippet": ""}]
     state = _state_with_draft("See AIR 1978 SC 597.", findings)
     result = await run(state)
@@ -187,11 +187,11 @@ class _FakeRetriever:
 @pytest.mark.asyncio
 async def test_low_score_retrieval_does_not_mark_citation_verified(monkeypatch):
     """CRIT-01: A retriever result below similarity_threshold must NOT produce verified=True."""
-    import lexagent.nodes.cite as cite_module
+    import themis.nodes.cite as cite_module
 
     # Patch HybridRetriever so it returns a below-threshold score
     monkeypatch.setattr(
-        "lexagent.tools.retriever.HybridRetriever",
+        "themis.tools.retriever.HybridRetriever",
         _FakeRetriever,
     )
 
@@ -214,7 +214,7 @@ async def test_above_threshold_score_marks_citation_verified(monkeypatch):
             return cls(0.9)  # well above 0.35 threshold
 
     monkeypatch.setattr(
-        "lexagent.tools.retriever.HybridRetriever",
+        "themis.tools.retriever.HybridRetriever",
         _HighScoreRetriever,
     )
 

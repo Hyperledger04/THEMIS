@@ -1,4 +1,4 @@
-"""Tests for lexagent/contract/executor.py — PlaybookExecutor."""
+"""Tests for themis/contract/executor.py — PlaybookExecutor."""
 from __future__ import annotations
 
 import json
@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from lexagent.contract.executor import PlaybookExecutor, _compute_overall_risk
-from lexagent.contract.models import PlaybookExecution, PlaybookPosition, PlaybookSpec, PositionResult
+from themis.contract.executor import PlaybookExecutor, _compute_overall_risk
+from themis.contract.models import PlaybookExecution, PlaybookPosition, PlaybookSpec, PositionResult
 
 
 def _make_spec() -> PlaybookSpec:
@@ -75,7 +75,7 @@ async def test_executor_run_success():
     })
 
     with (
-        patch("lexagent.contract.executor._extract_text", return_value="Sample contract text"),
+        patch("themis.contract.executor._extract_text", return_value="Sample contract text"),
         patch("litellm.acompletion", new=AsyncMock(return_value=ok_response)),
     ):
         execution = await executor.run(spec, "/tmp/test.pdf", matter_id="matter_001")
@@ -99,7 +99,7 @@ async def test_executor_run_with_deviation():
     ]
 
     with (
-        patch("lexagent.contract.executor._extract_text", return_value="Contract text here"),
+        patch("themis.contract.executor._extract_text", return_value="Contract text here"),
         patch("litellm.acompletion", new=AsyncMock(side_effect=responses)),
     ):
         execution = await executor.run(spec, "/tmp/test.pdf")
@@ -117,7 +117,7 @@ async def test_executor_run_handles_llm_failure():
     spec = _make_spec()
 
     with (
-        patch("lexagent.contract.executor._extract_text", return_value="text"),
+        patch("themis.contract.executor._extract_text", return_value="text"),
         patch("litellm.acompletion", new=AsyncMock(side_effect=Exception("LLM error"))),
     ):
         execution = await executor.run(spec, "/tmp/test.pdf")
@@ -132,7 +132,7 @@ async def test_executor_run_fails_on_extraction_error():
     executor = PlaybookExecutor()
     spec = _make_spec()
 
-    with patch("lexagent.contract.executor._extract_text", side_effect=Exception("No PDF")):
+    with patch("themis.contract.executor._extract_text", side_effect=Exception("No PDF")):
         execution = await executor.run(spec, "/tmp/missing.pdf")
 
     assert execution.status == "failed"

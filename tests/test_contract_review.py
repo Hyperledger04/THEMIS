@@ -2,7 +2,7 @@
 
 import pytest
 
-from lexagent.nodes.contract_review import (
+from themis.nodes.contract_review import (
     _build_risk_analysis,
     _chunk_contract,
     run,
@@ -128,7 +128,7 @@ async def test_run_returns_error_when_pdf_extraction_fails(tmp_path, monkeypatch
     fake_pdf.write_bytes(b"%PDF-1.4 fake")
 
     monkeypatch.setattr(
-        "lexagent.nodes.contract_review._extract_pdf_text",
+        "themis.nodes.contract_review._extract_pdf_text",
         lambda path: "",  # simulate extraction failure
     )
 
@@ -146,7 +146,7 @@ async def test_run_produces_draft_output_on_success(tmp_path, monkeypatch):
 
     # Patch PDF extraction
     monkeypatch.setattr(
-        "lexagent.nodes.contract_review._extract_pdf_text",
+        "themis.nodes.contract_review._extract_pdf_text",
         lambda path: "This is a sample contract between Party A and Party B.",
     )
 
@@ -178,14 +178,14 @@ async def test_run_produces_draft_output_on_success(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_run_workflow_mode_contract_review_in_graph(monkeypatch):
     """Verify graph routes to contract_review node when workflow_mode is set."""
-    from lexagent.graph import build_graph
+    from themis.graph import build_graph
 
     # Mock intake.run — intake is the graph entry point and always runs first.
     # We return intake_complete=True immediately to bypass the LLM call.
     async def _mock_intake_run(state):
         return {"intake_complete": True, "workflow_mode": state.get("workflow_mode", "draft")}
 
-    monkeypatch.setattr("lexagent.nodes.intake.run", _mock_intake_run)
+    monkeypatch.setattr("themis.nodes.intake.run", _mock_intake_run)
 
     # Patch contract_review.run to avoid actual PDF/LLM calls
     async def _mock_contract_run(state):
@@ -201,7 +201,7 @@ async def test_run_workflow_mode_contract_review_in_graph(monkeypatch):
             "messages": [],
         }
 
-    monkeypatch.setattr("lexagent.nodes.contract_review.run", _mock_contract_run)
+    monkeypatch.setattr("themis.nodes.contract_review.run", _mock_contract_run)
 
     graph = build_graph().compile()
     initial_state = {

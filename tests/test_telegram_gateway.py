@@ -2,8 +2,8 @@
 
 import pytest
 
-from lexagent.config import LexConfig
-from lexagent.gateway.telegram import (
+from themis.config import LexConfig
+from themis.gateway.telegram import (
     TelegramSession,
     _get_or_create_session,
     _is_allowed,
@@ -116,7 +116,7 @@ def test_telegram_session_can_be_marked_completed():
 # ---------------------------------------------------------------------------
 
 def test_escape_md_escapes_special_chars():
-    from lexagent.gateway.telegram import _escape_md
+    from themis.gateway.telegram import _escape_md
     result = _escape_md("Hello (world) — test!")
     assert "\\(" in result
     assert "\\)" in result
@@ -124,6 +124,6 @@ def test_escape_md_escapes_special_chars():
 
 
 def test_escape_md_leaves_plain_text_unchanged():
-    from lexagent.gateway.telegram import _escape_md
+    from themis.gateway.telegram import _escape_md
     result = _escape_md("Hello world")
     assert result == "Hello world"

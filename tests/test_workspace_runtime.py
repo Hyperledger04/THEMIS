@@ -1,7 +1,7 @@
-from lexagent.ingestion.anchors import build_line_anchors
-from lexagent.runtime.models import AgentApproval, AgentJob, AgentRun, AgentStep
-from lexagent.runtime.postgres import RUNTIME_SCHEMA_SQL
-from lexagent.workspace.models import ExtractedFact, SourceAnchor
+from themis.ingestion.anchors import build_line_anchors
+from themis.runtime.models import AgentApproval, AgentJob, AgentRun, AgentStep
+from themis.runtime.postgres import RUNTIME_SCHEMA_SQL
+from themis.workspace.models import ExtractedFact, SourceAnchor
 
 
 def test_source_anchor_builds_clickable_viewer_url():

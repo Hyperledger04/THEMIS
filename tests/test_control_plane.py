@@ -36,7 +36,7 @@ async def _async_iter(items):
 
 @pytest.fixture()
 def client():
-    from lexagent.gateway.control_plane import app
+    from themis.gateway.control_plane import app
     return TestClient(app)
 
 
@@ -49,7 +49,7 @@ def test_health(client):
 
 
 def test_document_viewer_returns_anchor_target(client):
-    with patch("lexagent.gateway.control_plane.LexConfig") as cfg_cls:
+    with patch("themis.gateway.control_plane.LexConfig") as cfg_cls:
         cfg = MagicMock()
         cfg.api_secret_key = None
         cfg.default_firm_id = "default"
@@ -72,8 +72,8 @@ def test_send_message_no_auth_required_when_key_not_set(client):
     """In single-lawyer mode (no api_secret_key) auth is skipped."""
     graph = _make_graph_mock()
     with (
-        patch("lexagent.gateway.control_plane.get_graph", return_value=graph),
-        patch("lexagent.gateway.control_plane.LexConfig") as cfg_cls,
+        patch("themis.gateway.control_plane.get_graph", return_value=graph),
+        patch("themis.gateway.control_plane.LexConfig") as cfg_cls,
     ):
         cfg = MagicMock()
         cfg.api_secret_key = None
@@ -91,7 +91,7 @@ def test_send_message_no_auth_required_when_key_not_set(client):
 
 def test_send_message_rejects_missing_token(client):
     """When api_secret_key is set, missing Bearer token → 401."""
-    with patch("lexagent.gateway.control_plane.LexConfig") as cfg_cls:
+    with patch("themis.gateway.control_plane.LexConfig") as cfg_cls:
         cfg = MagicMock()
         cfg.api_secret_key = "secret-key"
         cfg.default_firm_id = "firm1"
@@ -106,7 +106,7 @@ def test_send_message_rejects_missing_token(client):
 
 def test_send_message_rejects_wrong_token(client):
     """Wrong Bearer token → 403."""
-    with patch("lexagent.gateway.control_plane.LexConfig") as cfg_cls:
+    with patch("themis.gateway.control_plane.LexConfig") as cfg_cls:
         cfg = MagicMock()
         cfg.api_secret_key = "secret-key"
         cfg.default_firm_id = "firm1"
@@ -137,8 +137,8 @@ def test_send_message_new_matter_resets_intake(client):
     graph.ainvoke = fake_ainvoke
 
     with (
-        patch("lexagent.gateway.control_plane.get_graph", return_value=graph),
-        patch("lexagent.gateway.control_plane.LexConfig") as cfg_cls,
+        patch("themis.gateway.control_plane.get_graph", return_value=graph),
+        patch("themis.gateway.control_plane.LexConfig") as cfg_cls,
     ):
         cfg = MagicMock()
         cfg.api_secret_key = None
@@ -167,8 +167,8 @@ def test_send_message_resumed_matter_preserves_intake(client):
     graph.ainvoke = fake_ainvoke
 
     with (
-        patch("lexagent.gateway.control_plane.get_graph", return_value=graph),
-        patch("lexagent.gateway.control_plane.LexConfig") as cfg_cls,
+        patch("themis.gateway.control_plane.get_graph", return_value=graph),
+        patch("themis.gateway.control_plane.LexConfig") as cfg_cls,
     ):
         cfg = MagicMock()
         cfg.api_secret_key = None
@@ -186,8 +186,8 @@ def test_send_message_returns_draft_on_success(client):
     graph.aget_state = AsyncMock(return_value=None)
 
     with (
-        patch("lexagent.gateway.control_plane.get_graph", return_value=graph),
-        patch("lexagent.gateway.control_plane.LexConfig") as cfg_cls,
+        patch("themis.gateway.control_plane.get_graph", return_value=graph),
+        patch("themis.gateway.control_plane.LexConfig") as cfg_cls,
     ):
         cfg = MagicMock()
         cfg.api_secret_key = None
@@ -213,8 +213,8 @@ def test_send_message_returns_in_progress_when_no_draft(client):
     graph.ainvoke = fake_ainvoke
 
     with (
-        patch("lexagent.gateway.control_plane.get_graph", return_value=graph),
-        patch("lexagent.gateway.control_plane.LexConfig") as cfg_cls,
+        patch("themis.gateway.control_plane.get_graph", return_value=graph),
+        patch("themis.gateway.control_plane.LexConfig") as cfg_cls,
     ):
         cfg = MagicMock()
         cfg.api_secret_key = None
@@ -233,7 +233,7 @@ def test_ws_closes_4403_on_wrong_token(client):
     """ws_endpoint closes with 4403 when api_secret_key is set and token is wrong."""
     from starlette.websockets import WebSocketDisconnect
 
-    with patch("lexagent.gateway.control_plane.LexConfig") as cfg_cls:
+    with patch("themis.gateway.control_plane.LexConfig") as cfg_cls:
         cfg = MagicMock()
         cfg.api_secret_key = "secret"
         cfg.default_firm_id = "firm1"
@@ -267,9 +267,9 @@ def test_ws_accepts_correct_token(client):
     fake_claims = {"firm_id": "firm1", "sub": "user1", "role": "admin"}
 
     with (
-        patch("lexagent.gateway.control_plane.get_graph", return_value=graph),
-        patch("lexagent.gateway.control_plane.LexConfig") as cfg_cls,
-        patch("lexagent.security.tokens.decode_access_token", return_value=fake_claims),
+        patch("themis.gateway.control_plane.get_graph", return_value=graph),
+        patch("themis.gateway.control_plane.LexConfig") as cfg_cls,
+        patch("themis.security.tokens.decode_access_token", return_value=fake_claims),
     ):
         cfg = MagicMock()
         cfg.api_secret_key = "secret"

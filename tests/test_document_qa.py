@@ -5,7 +5,7 @@ import pytest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from lexagent.nodes.document_qa import (
+from themis.nodes.document_qa import (
     DocChunk,
     _find_doc_chunk,
     _infer_location,
@@ -73,7 +73,7 @@ def test_find_doc_chunk_not_found():
 # ---------------------------------------------------------------------------
 
 def test_build_retriever_returns_hybrid_retriever():
-    from lexagent.tools.retriever import HybridRetriever
+    from themis.tools.retriever import HybridRetriever
     chunks = [
         DocChunk(text="The agreement shall be governed by the laws of India.", page=1, location="Page 1, Clause 1", chunk_index=0),
         DocChunk(text="Either party may terminate on 30 days' written notice.", page=3, location="Page 3, Clause 8", chunk_index=1),
@@ -140,8 +140,8 @@ def test_parse_docx_empty_paragraphs(tmp_path):
 
 @pytest.mark.asyncio
 async def test_answer_question_returns_inline_citations():
-    from lexagent.nodes.document_qa import answer_question
-    from lexagent.config import LexConfig
+    from themis.nodes.document_qa import answer_question
+    from themis.config import LexConfig
 
     chunks = [
         DocChunk(text="The licensee shall not sub-license any rights without prior written consent.", page=4, location="Page 4, Clause 12.3", chunk_index=0),
@@ -151,7 +151,7 @@ async def test_answer_question_returns_inline_citations():
     retriever = build_retriever(chunks)
     cfg = LexConfig()
 
-    with patch("lexagent.nodes._llm.call_llm", new_callable=AsyncMock) as mock_call_llm:
+    with patch("themis.nodes._llm.call_llm", new_callable=AsyncMock) as mock_call_llm:
         mock_call_llm.return_value = {
             "content": "Sub-licensing is prohibited [1]. Governing law is India [2].",
             "tool_calls": None,
@@ -166,8 +166,8 @@ async def test_answer_question_returns_inline_citations():
 
 @pytest.mark.asyncio
 async def test_answer_question_no_relevant_chunks():
-    from lexagent.nodes.document_qa import answer_question
-    from lexagent.config import LexConfig
+    from themis.nodes.document_qa import answer_question
+    from themis.config import LexConfig
 
     # Empty document
     chunks: list[DocChunk] = []

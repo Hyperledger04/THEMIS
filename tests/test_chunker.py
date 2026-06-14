@@ -1,10 +1,10 @@
-"""Tests for lexagent/tools/chunker.py"""
+"""Tests for themis/tools/chunker.py"""
 import os
 import tempfile
 
 import pytest
 
-from lexagent.tools.chunker import (
+from themis.tools.chunker import (
     Chunk,
     _approx_tokens,
     _extract_pdf_text,
@@ -178,7 +178,7 @@ def test_extract_pdf_text_missing_pdfplumber(monkeypatch):
 # -----------------------------------------------------------------------
 
 def test_chunk_file_txt(tmp_path):
-    from lexagent.tools.chunker import chunk_file
+    from themis.tools.chunker import chunk_file
     f = tmp_path / "act.txt"
     f.write_text("Section 1 Short title.\nThis Act may be called the Test Act.")
     chunks = chunk_file(str(f))
