@@ -12,7 +12,7 @@ import logging
 from langgraph.graph import END, StateGraph
 
 from themis.config import LexConfig
-from themis.nodes import cite, draft, intake, react_research, retrieve, review
+from themis.nodes import chamber, cite, draft, intake, react_research, retrieve, review
 from themis.state import LexState
 
 logger = logging.getLogger(__name__)
@@ -183,23 +183,44 @@ def _make_routes(cfg: LexConfig):
             return END
         return "retrieve"
 
+    def _cite_or_review(state: LexState) -> str:
+        """
+        Shared logic for choosing between cite and review.
+        WHY extracted: both route_after_draft (chamber disabled) and
+        route_after_chamber (chamber enabled) need the same cite-or-review decision.
+        """
+        if cfg.auto_verify_citations and state.get("research_findings"):
+            return "cite"
+        return "review"
+
     def route_after_draft(state: LexState) -> str:
         """
         After draft runs:
+        - If chamber_enabled: hand off to the adversarial review chamber first.
         - Phase 5: Route to cite (which feeds review) when research findings exist.
         - If no findings, skip cite and go directly to review for validation + .docx.
         """
         if state.get("error"):
             return END
 
-        # WHY: cite needs a corpus to retrieve against. If no findings exist,
-        # skip cite and go straight to review so we still get .docx output and
-        # validation (length check, empty-draft check) without false unverified warnings.
-        if cfg.auto_verify_citations and state.get("research_findings"):
-            return "cite"
-        return "review"
+        # WHY: chamber sits between draft and the final cite/review pipeline.
+        # When enabled, the draft goes through three adversarial LLM passes before
+        # the standard citation-verification and review steps run.
+        if state.get("chamber_enabled"):
+            return "chamber"
 
-    return route_after_intake, route_after_research, route_after_draft
+        return _cite_or_review(state)
+
+    def route_after_chamber(state: LexState) -> str:
+        """
+        After the chamber node runs, apply the same cite-or-review routing
+        that route_after_draft would have used if chamber were disabled.
+        """
+        if state.get("error"):
+            return END
+        return _cite_or_review(state)
+
+    return route_after_intake, route_after_research, route_after_draft, route_after_chamber
 
 
 # -----------------------------------------------------------------------
@@ -222,7 +243,7 @@ def build_graph() -> StateGraph:
     Postgres (production) and MemorySaver (tests/CLI).
     """
     cfg = LexConfig()
-    route_after_intake, route_after_research, route_after_draft = _make_routes(cfg)
+    route_after_intake, route_after_research, route_after_draft, route_after_chamber = _make_routes(cfg)
 
     # LANGGRAPH: StateGraph(LexState) tells LangGraph the shape of the state.
     # It uses this to validate that nodes return keys that exist in LexState.
@@ -237,6 +258,7 @@ def build_graph() -> StateGraph:
     graph.add_node("research", react_research.run)
     graph.add_node("retrieve", retrieve.run)
     graph.add_node("draft", draft.run)
+    graph.add_node("chamber", chamber.run)
     graph.add_node("cite", cite.run)
     graph.add_node("review", review.run)
     graph.add_node("contract_review", contract_review.run)
@@ -251,7 +273,9 @@ def build_graph() -> StateGraph:
     graph.add_conditional_edges("intake", route_after_intake)
 
     # LANGGRAPH: add_conditional_edges on draft too — handles cite-or-review routing.
+    # When chamber_enabled, draft routes to chamber first; chamber then routes to cite or review.
     graph.add_conditional_edges("draft", route_after_draft)
+    graph.add_conditional_edges("chamber", route_after_chamber)
 
     # research → draft normally; research_only=True → END
     graph.add_conditional_edges("research", route_after_research)

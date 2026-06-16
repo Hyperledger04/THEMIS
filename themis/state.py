@@ -148,3 +148,17 @@ class LexState(TypedDict):
     # so mid-graph questions can be spoken back to the right caller.
     voice_session_id: Optional[str]           # Twilio Call SID or WebSocket UUID
     voice_channel: Optional[str]              # "twilio" | "websocket"
+
+    # --- Redline (doc-haus Feature 1) ---
+    redline_source_path: Optional[str]   # original .docx to diff against
+    redline_output_path: Optional[str]   # path written by review node
+
+    # --- Chamber review (doc-haus Feature 2) ---
+    chamber_enabled: Optional[bool]      # activated by --chamber flag or contract_review
+    chamber_issues: Optional[str]        # Reviewer LLM output
+    chamber_pushback: Optional[str]      # Challenger LLM output
+    chamber_review: Optional[str]        # Summarizer final review
+
+    # --- Grid analysis (doc-haus Feature 3) ---
+    grid_questions: Optional[List[str]]  # questions to run across all matter docs
+    grid_results: Optional[dict]         # {question: {doc_name: answer}}

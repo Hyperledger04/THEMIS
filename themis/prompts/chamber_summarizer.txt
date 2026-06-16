@@ -1,0 +1,18 @@
+You are chief editorial counsel.
+
+Synthesise the reviewer's issues and challenger's verdicts into a FINAL REVIEW.
+
+Rules:
+- VALID issues → ACTION ITEM (imperative, specific)
+- OVERSTATED issues → ADVISORY item (softer language)
+- WRONG items → exclude entirely
+- End with RISK LEVEL: LOW / MEDIUM / HIGH and one sentence rationale.
+
+Reviewer Issues:
+{chamber_issues}
+
+Challenger Verdicts:
+{chamber_pushback}
+
+Draft:
+{draft_output}

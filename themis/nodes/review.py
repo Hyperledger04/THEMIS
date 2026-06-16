@@ -365,9 +365,24 @@ async def run(state: LexState) -> dict:
                 if affidavit_path_out:
                     console.print(f"[bold green]✓ Affidavit saved to:[/bold green] {affidavit_path_out}")
 
+        # Redline: if caller set redline_source_path, produce a tracked-changes .docx
+        redline_output_path: str | None = None
+        redline_source = state.get("redline_source_path")
+        if redline_source and docx_path_out and filing_body.strip():
+            from themis.tools.redline import write_redline_docx
+            redline_out = str(_Path(docx_path_out).parent / "redline.docx")
+            try:
+                redline_output_path = await loop.run_in_executor(
+                    None, write_redline_docx, redline_source, filing_body, redline_out
+                )
+                console.print(f"[bold green]✓ Redline saved to:[/bold green] {redline_output_path}")
+            except Exception as _re:
+                console.print(f"[yellow]Redline skipped:[/yellow] {_re}")
+
         return {
             "docx_path": docx_path_out,
             "affidavit_path": affidavit_path_out,
+            "redline_output_path": redline_output_path,
             "risk_annotations": [
                 {"clause": "review", "risk_level": "M", "note": i} for i in p1_issues
             ] if p1_issues else None,

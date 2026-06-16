@@ -107,6 +107,14 @@ def draft(
         "-S",
         help="Force-load a skill by name (repeatable: --skill s138_complaint --skill bail_application)",
     ),
+    redline: Optional[str] = typer.Option(
+        None, "--redline", "-R",
+        help="Path to original .docx to produce tracked-changes redline against new draft.",
+    ),
+    chamber: bool = typer.Option(
+        False, "--chamber", "-C",
+        help="Enable adversarial multi-agent review chamber before final output.",
+    ),
 ) -> None:
     """
     Draft a legal document from a matter brief.
@@ -237,7 +245,7 @@ def draft(
 
     console.print()
 
-    asyncio.run(_run_draft(brief, session_matter_id, cfg, prior_state, output_path, agent_config, list(skill) if skill else None))
+    asyncio.run(_run_draft(brief, session_matter_id, cfg, prior_state, output_path, agent_config, list(skill) if skill else None, redline_source_path=redline, chamber_enabled=chamber))
 
 
 # ---------------------------------------------------------------------------
@@ -343,6 +351,8 @@ async def _run_draft(
     output_path: Optional[str] = None,
     agent_config: Optional[dict] = None,
     forced_skill_names: Optional[List[str]] = None,
+    redline_source_path: Optional[str] = None,
+    chamber_enabled: bool = False,
 ) -> None:
     from themis.nodes.draft import register_draft_stream, unregister_draft_stream
 
@@ -360,8 +370,10 @@ async def _run_draft(
         state["docx_path"] = output_path
         state["active_agent"] = agent_config
         state["forced_skill_names"] = forced_skill_names  # type: ignore[typeddict-unknown-key]
+        state["redline_source_path"] = redline_source_path  # type: ignore[typeddict-unknown-key]
+        state["chamber_enabled"] = chamber_enabled  # type: ignore[typeddict-unknown-key]
     else:
-        state = _blank_state(initial_brief, matter_id, output_path, agent_config, forced_skill_names)
+        state = _blank_state(initial_brief, matter_id, output_path, agent_config, forced_skill_names, redline_source_path, chamber_enabled=chamber_enabled)
 
     max_intake_rounds = 5
     intake_round = 0
@@ -527,6 +539,8 @@ def _blank_state(
     output_path: Optional[str] = None,
     agent_config: Optional[dict] = None,
     forced_skill_names: Optional[List[str]] = None,
+    redline_source_path: Optional[str] = None,
+    chamber_enabled: bool = False,
 ) -> LexState:
     return {  # type: ignore[return-value]
         "user_input": brief,
@@ -561,6 +575,8 @@ def _blank_state(
         "retrieval_chunks": None,
         "docx_path": output_path,
         "forced_skill_names": forced_skill_names,
+        "redline_source_path": redline_source_path,
+        "chamber_enabled": chamber_enabled or None,
     }
 
 
@@ -2453,6 +2469,52 @@ def help_cmd() -> None:
         padding=(0, 2),
     ))
     console.print()
+
+
+@app.command("grid")
+def grid_cmd(
+    matter_id: str = typer.Argument(..., help="Matter ID to run grid against."),
+    questions: Optional[List[str]] = typer.Option(
+        None, "--questions", "-q",
+        help="Question to run across all documents. Repeat for multiple.",
+    ),
+    output_csv: Optional[str] = typer.Option(None, "--csv", help="Write results to CSV file."),
+) -> None:
+    """Run a question grid across all documents in a matter."""
+    import csv as csv_mod
+    from themis.nodes.grid import run as grid_run
+
+    if not questions:
+        console.print("[red]At least one --questions/-q is required.[/red]")
+        raise typer.Exit(1)
+
+    result = asyncio.run(grid_run({
+        "matter_id": matter_id,
+        "grid_questions": questions,
+        "messages": [],
+        "error": None,
+    }))
+    grid = result.get("grid_results") or {}
+    if not grid:
+        console.print("[yellow]No results — check that documents exist in the matter docs folder.[/yellow]")
+        raise typer.Exit(1)
+
+    docs = sorted({d for row in grid.values() for d in row})
+    table = Table(show_header=True, header_style="bold cyan")
+    table.add_column("Question", style="bold", max_width=40)
+    for doc in docs:
+        table.add_column(doc, max_width=30)
+    for question, row in grid.items():
+        table.add_row(question, *[row.get(d, "") for d in docs])
+    console.print(table)
+
+    if output_csv:
+        with open(output_csv, "w", newline="") as f:
+            w = csv_mod.writer(f)
+            w.writerow(["Question"] + docs)
+            for question, row in grid.items():
+                w.writerow([question] + [row.get(d, "") for d in docs])
+        console.print(f"[green]Saved to {output_csv}[/green]")
 
 
 if __name__ == "__main__":
