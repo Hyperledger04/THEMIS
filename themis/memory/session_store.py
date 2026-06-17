@@ -118,6 +118,14 @@ def init_db(sessions_db: str = "~/.themis/sessions.db") -> None:
                 VALUES ('delete', old.id, old.matter_id, old.matter_type, old.parties, old.jurisdiction, old.purpose, old.summary);
             END;
 
+            CREATE TRIGGER IF NOT EXISTS sessions_au
+            AFTER UPDATE ON sessions BEGIN
+                INSERT INTO sessions_fts(sessions_fts, rowid, matter_id, matter_type, parties, jurisdiction, purpose, summary)
+                VALUES ('delete', old.id, old.matter_id, old.matter_type, old.parties, old.jurisdiction, old.purpose, old.summary);
+                INSERT INTO sessions_fts(rowid, matter_id, matter_type, parties, jurisdiction, purpose, summary)
+                VALUES (new.id, new.matter_id, new.matter_type, new.parties, new.jurisdiction, new.purpose, new.summary);
+            END;
+
             -- T1-B: persistent chat history across CLI invocations.
             -- WHY: LiteLLM chat_model starts fresh each run (messages=[]).
             -- Storing turns here lets run_chat() resume where it left off.
@@ -155,6 +163,8 @@ def init_db(sessions_db: str = "~/.themis/sessions.db") -> None:
         row = conn.execute("SELECT version FROM schema_version LIMIT 1").fetchone()
         if not row:
             conn.execute("INSERT INTO schema_version (version) VALUES (?)", (SCHEMA_VERSION,))
+        elif row[0] < SCHEMA_VERSION:
+            conn.execute("UPDATE schema_version SET version = ?", (SCHEMA_VERSION,))
 
 
 def save_session(
@@ -468,13 +478,14 @@ def save_chat_message(
     role: str,
     content: str,
     sessions_db: str = "~/.themis/sessions.db",
+    firm_id: str = "default",
 ) -> None:
     """Persist a single chat turn (user or assistant) to SQLite."""
     init_db(sessions_db)
     with _connect(sessions_db) as conn:
         conn.execute(
-            "INSERT INTO chat_messages (session_id, role, content, created_at) VALUES (?, ?, ?, ?)",
-            (session_id, role, content, datetime.now().isoformat()),
+            "INSERT INTO chat_messages (session_id, role, content, created_at, firm_id) VALUES (?, ?, ?, ?, ?)",
+            (session_id, role, content, datetime.now().isoformat(), firm_id),
         )
 
 
@@ -482,6 +493,7 @@ def load_chat_history(
     session_id: str,
     limit: int = 20,
     sessions_db: str = "~/.themis/sessions.db",
+    firm_id: str = "default",
 ) -> List[dict]:
     """
     Load the last `limit` messages for a session, oldest-first.
@@ -493,12 +505,12 @@ def load_chat_history(
             """
             SELECT role, content FROM (
                 SELECT role, content, created_at FROM chat_messages
-                WHERE session_id = ?
+                WHERE session_id = ? AND firm_id = ?
                 ORDER BY created_at DESC
                 LIMIT ?
             ) ORDER BY created_at ASC
             """,
-            (session_id, limit),
+            (session_id, firm_id, limit),
         ).fetchall()
         return [{"role": row["role"], "content": row["content"]} for row in rows]
 

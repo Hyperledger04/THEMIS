@@ -79,3 +79,22 @@ def test_search_sessions_is_firm_scoped(tmp_db):
     ids = {h["matter_id"] for h in hits}
     assert "M001" in ids
     assert "M002" not in ids
+
+
+def test_update_session_is_firm_scoped(tmp_db):
+    """update_session from firm_b must not overwrite firm_a's row."""
+    from themis.memory.session_store import update_session
+
+    state_a = _make_state("M001")
+    save_session(state_a, sessions_db=tmp_db, firm_id="firm_a", user_id="u1")
+
+    state_b = _make_state("M001")
+    state_b["purpose"] = "firm_b_purpose"
+    update_session(state_b, sessions_db=tmp_db, firm_id="firm_b", user_id="u2")
+
+    result_a = get_session_state("M001", sessions_db=tmp_db, firm_id="firm_a")
+    assert result_a["purpose"] == "test", "firm_a session must not be overwritten by firm_b update"
+
+    result_b = get_session_state("M001", sessions_db=tmp_db, firm_id="firm_b")
+    assert result_b is not None
+    assert result_b["purpose"] == "firm_b_purpose"
