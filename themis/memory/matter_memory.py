@@ -2,7 +2,8 @@
 # for the same matter. A lawyer working on a complex case over several weeks can continue
 # from where they left off — the agent already knows the parties, the court, past decisions.
 #
-# Storage: ~/.themis/matters/{matter_id}/MEMORY.md
+# Storage: ~/.themis/matters/{matter_id}/MEMORY.md  (personal mode)
+#          ~/.themis/matters/{firm_id}/{matter_id}/MEMORY.md  (enterprise mode)
 # Format: append-only markdown log with timestamped entries.
 # Phase 5 will add RAG (retrieval-augmented generation) over past matter memory.
 
@@ -17,31 +18,54 @@ MEMORY_FILENAME = "MEMORY.md"
 STATE_FILENAME = "state.json"
 
 
-def matter_dir(matter_id: str, matters_dir: str = "~/.themis/matters") -> Path:
-    """Returns the Path for a specific matter's directory. Creates it if needed."""
-    path = Path(matters_dir).expanduser() / matter_id
+def matter_dir(
+    matter_id: str,
+    matters_dir: str = "~/.themis/matters",
+    firm_id: str = "default",
+) -> Path:
+    """
+    Returns the Path for a specific matter's directory. Creates it if needed.
+
+    WHY firm partition: in enterprise mode (firm_id != 'default'), matter data
+    lives at {matters_dir}/{firm_id}/{matter_id}/ — two firms with the same
+    matter_id cannot share files. Personal mode keeps the flat structure.
+    """
+    base = Path(matters_dir).expanduser()
+    if firm_id and firm_id != "default":
+        path = base / firm_id / matter_id
+    else:
+        path = base / matter_id
     path.mkdir(parents=True, exist_ok=True)
     return path
 
 
-def load_matter_memory(matter_id: str, matters_dir: str = "~/.themis/matters") -> Optional[str]:
+def load_matter_memory(
+    matter_id: str,
+    matters_dir: str = "~/.themis/matters",
+    firm_id: str = "default",
+) -> Optional[str]:
     """
     Load the MEMORY.md for a matter.
     Returns None if no memory exists yet (first session for this matter).
     """
-    mem_path = matter_dir(matter_id, matters_dir) / MEMORY_FILENAME
+    mem_path = matter_dir(matter_id, matters_dir, firm_id) / MEMORY_FILENAME
     if not mem_path.exists():
         return None
     return mem_path.read_text(encoding="utf-8")
 
 
-def save_matter_memory(matter_id: str, state: LexState, matters_dir: str = "~/.themis/matters") -> Path:
+def save_matter_memory(
+    matter_id: str,
+    state: LexState,
+    matters_dir: str = "~/.themis/matters",
+    firm_id: str = "default",
+) -> Path:
     """
     Append a session summary to MEMORY.md for the given matter.
     Called at the end of each session so context is available next time.
     Returns the path where memory was saved.
     """
-    mdir = matter_dir(matter_id, matters_dir)
+    mdir = matter_dir(matter_id, matters_dir, firm_id)
     mem_path = mdir / MEMORY_FILENAME
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
 
@@ -91,32 +115,40 @@ def save_matter_memory(matter_id: str, state: LexState, matters_dir: str = "~/.t
 
     try:
         import asyncio
-        asyncio.ensure_future(maybe_compress_memory(matter_id, matters_dir))
+        asyncio.ensure_future(maybe_compress_memory(matter_id, matters_dir, firm_id=firm_id))
     except Exception:
         pass
 
     return mem_path
 
 
-def load_state_snapshot(matter_id: str, matters_dir: str = "~/.themis/matters") -> Optional[dict]:
+def load_state_snapshot(matter_id: str, matters_dir: str = "~/.themis/matters", firm_id: str = "default") -> Optional[dict]:
     """
     Load the last saved state snapshot for a matter.
     Used when --matter-id is passed to `lex draft` to continue a matter.
     Returns None if no snapshot exists.
     """
-    snap_path = matter_dir(matter_id, matters_dir) / STATE_FILENAME
+    snap_path = matter_dir(matter_id, matters_dir, firm_id) / STATE_FILENAME
     if not snap_path.exists():
         return None
     with snap_path.open("r", encoding="utf-8") as f:
         return json.load(f)
 
 
-def list_matters(matters_dir: str = "~/.themis/matters") -> list[dict]:
+def list_matters(
+    matters_dir: str = "~/.themis/matters",
+    firm_id: str = "default",
+) -> list[dict]:
     """
     List all saved matters, sorted by most recently modified.
     Returns a list of dicts: [{matter_id, created, last_modified, matter_type, parties}]
+
+    WHY base shift: in enterprise mode, matters live under {matters_dir}/{firm_id}/,
+    so we scan that sub-directory rather than the top-level to avoid cross-firm leakage.
     """
     base = Path(matters_dir).expanduser()
+    if firm_id and firm_id != "default":
+        base = base / firm_id
     if not base.exists():
         return []
 
@@ -162,13 +194,13 @@ def list_matters(matters_dir: str = "~/.themis/matters") -> list[dict]:
 # -----------------------------------------------------------------------
 
 
-def _resolve_memory_path(matter_id: str, matters_dir: str) -> Path:
-    return matter_dir(matter_id, matters_dir) / MEMORY_FILENAME
+def _resolve_memory_path(matter_id: str, matters_dir: str, firm_id: str = "default") -> Path:
+    return matter_dir(matter_id, matters_dir, firm_id) / MEMORY_FILENAME
 
 
-async def maybe_compress_memory(matter_id: str, matters_dir: str, threshold: int = 3) -> None:
+async def maybe_compress_memory(matter_id: str, matters_dir: str, threshold: int = 3, firm_id: str = "default") -> None:
     try:
-        text = load_matter_memory(matter_id, matters_dir)
+        text = load_matter_memory(matter_id, matters_dir, firm_id)
         if not text:
             return
         MARKER = "## Session"
@@ -198,7 +230,7 @@ async def maybe_compress_memory(matter_id: str, matters_dir: str, threshold: int
         new_text = (
             (preamble + "\n\n") if preamble else ""
         ) + f"[Compressed — {len(sessions)-1} session(s)]\n{summary}\n\n{latest}"
-        _resolve_memory_path(matter_id, matters_dir).write_text(new_text.strip() + "\n", encoding="utf-8")
+        _resolve_memory_path(matter_id, matters_dir, firm_id).write_text(new_text.strip() + "\n", encoding="utf-8")
     except Exception:
         pass
 

@@ -243,3 +243,68 @@ class TestMatterIsolation:
         # Correct firm IDs work
         assert repo.get_matter("M-ALPHA", "firm_a") is not None
         assert repo.get_matter("M-BETA", "firm_b") is not None
+
+
+# ── Firm-scoped path isolation ──────────────────────────────────────────────
+
+import tempfile
+from pathlib import Path as _Path
+
+from themis.memory.matter_memory import (
+    load_matter_memory,
+    save_matter_memory,
+    list_matters,
+)
+
+
+def _minimal_state(matter_id: str) -> dict:
+    return {
+        "matter_id": matter_id,
+        "matter_type": "writ",
+        "parties": {"petitioner": "Test Party"},
+        "jurisdiction": "Delhi HC",
+        "purpose": "isolation test",
+        "plain_english_summary": f"summary {matter_id}",
+        "messages": [],
+    }
+
+
+def test_firm_scoped_paths_do_not_overlap(tmp_path):
+    """Two firms with the same matter_id must write to different paths."""
+    matters_dir = str(tmp_path / "matters")
+
+    save_matter_memory("M001", _minimal_state("M001"), matters_dir=matters_dir, firm_id="firm_a")
+    save_matter_memory("M001", _minimal_state("M001"), matters_dir=matters_dir, firm_id="firm_b")
+
+    path_a = tmp_path / "matters" / "firm_a" / "M001" / "MEMORY.md"
+    path_b = tmp_path / "matters" / "firm_b" / "M001" / "MEMORY.md"
+    assert path_a.exists(), f"Expected firm_a path at {path_a}"
+    assert path_b.exists(), f"Expected firm_b path at {path_b}"
+
+
+def test_list_matters_is_firm_scoped(tmp_path):
+    matters_dir = str(tmp_path / "matters")
+    save_matter_memory("M001", _minimal_state("M001"), matters_dir=matters_dir, firm_id="firm_a")
+    save_matter_memory("M002", _minimal_state("M002"), matters_dir=matters_dir, firm_id="firm_b")
+
+    a_matters = list_matters(matters_dir=matters_dir, firm_id="firm_a")
+    ids = {m["matter_id"] for m in a_matters}
+    assert "M001" in ids
+    assert "M002" not in ids
+
+
+def test_personal_mode_path_unchanged(tmp_path):
+    """Without firm_id (default), path must be {matters_dir}/{matter_id}/ — no firm partition."""
+    matters_dir = str(tmp_path / "matters")
+    save_matter_memory("M001", _minimal_state("M001"), matters_dir=matters_dir)
+    expected = tmp_path / "matters" / "M001" / "MEMORY.md"
+    assert expected.exists(), "Personal mode must not add firm partition"
+
+
+def test_load_matter_memory_wrong_firm_returns_none(tmp_path):
+    """load_matter_memory with wrong firm_id must return None — not leak firm_a data."""
+    matters_dir = str(tmp_path / "matters")
+    save_matter_memory("M001", _minimal_state("M001"), matters_dir=matters_dir, firm_id="firm_a")
+
+    result = load_matter_memory("M001", matters_dir=matters_dir, firm_id="firm_b")
+    assert result is None, "firm_b must not read firm_a's MEMORY.md"

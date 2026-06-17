@@ -350,7 +350,8 @@ async def run(state: LexState) -> dict:
         # Always inject matter memory into the user turn — for ALL providers.
         # WHY user turn: see inject_memory_into_user_turn() docstring.
         from themis.memory.matter_memory import load_matter_memory
-        matter_mem = load_matter_memory(matter_id, config.matters_dir) if matter_id else None
+        firm_id = state.get("firm_id") or config.default_firm_id
+        matter_mem = load_matter_memory(matter_id, config.matters_dir, firm_id=firm_id) if matter_id else None
         draft_instruction = inject_memory_into_user_turn(draft_instruction, matter_mem)
 
         use_anthropic_caching = (

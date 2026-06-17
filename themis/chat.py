@@ -523,7 +523,7 @@ async def _tool_draft(
         db_path = Path(cfg.sessions_db).expanduser()
         init_db(db_path)
         save_session(state, db_path)
-        save_matter_memory(mid, state, Path(cfg.matters_dir).expanduser())  # type: ignore[arg-type]
+        save_matter_memory(mid, state, Path(cfg.matters_dir).expanduser(), firm_id=cfg.default_firm_id)  # type: ignore[arg-type]
     except Exception:
         pass
 
@@ -651,7 +651,7 @@ async def _tool_research(query: str, cfg: LexConfig) -> str:
 def _tool_list_matters(cfg: LexConfig) -> str:
     from themis.memory.matter_memory import list_matters
 
-    matters = list_matters(Path(cfg.matters_dir).expanduser())
+    matters = list_matters(Path(cfg.matters_dir).expanduser(), firm_id=cfg.default_firm_id)
     if not matters:
         return "No saved matters found."
 
@@ -668,7 +668,7 @@ def _tool_show_matter(matter_id: str, cfg: LexConfig) -> str:
     from themis.memory.matter_memory import load_matter_memory
     from themis.memory.session_store import get_session_state
 
-    memory = load_matter_memory(matter_id, Path(cfg.matters_dir).expanduser())
+    memory = load_matter_memory(matter_id, Path(cfg.matters_dir).expanduser(), firm_id=cfg.default_firm_id)
     if memory:
         return memory
 
