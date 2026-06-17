@@ -20,7 +20,7 @@ from typing import Generator, List, Optional
 
 from themis.state import LexState
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 def db_path(sessions_db: str = "~/.themis/sessions.db") -> Path:
@@ -67,7 +67,9 @@ def init_db(sessions_db: str = "~/.themis/sessions.db") -> None:
                 jurisdiction TEXT,
                 purpose     TEXT,
                 summary     TEXT,
-                state_json  TEXT
+                state_json  TEXT,
+                firm_id     TEXT NOT NULL DEFAULT 'default',
+                user_id     TEXT NOT NULL DEFAULT 'default'
             );
 
             -- Phase 8: Hearing reminders — fire N days before hearing_date.
@@ -82,7 +84,9 @@ def init_db(sessions_db: str = "~/.themis/sessions.db") -> None:
                 days_before  INTEGER NOT NULL DEFAULT 1,
                 fire_at      TEXT NOT NULL,
                 fired        INTEGER NOT NULL DEFAULT 0,
-                created_at   TEXT NOT NULL
+                created_at   TEXT NOT NULL,
+                firm_id      TEXT NOT NULL DEFAULT 'default',
+                user_id      TEXT NOT NULL DEFAULT 'default'
             );
 
             -- FTS5 virtual table that indexes the text columns for full-text search.
@@ -122,7 +126,9 @@ def init_db(sessions_db: str = "~/.themis/sessions.db") -> None:
                 session_id  TEXT NOT NULL,
                 role        TEXT NOT NULL,
                 content     TEXT NOT NULL,
-                created_at  TEXT NOT NULL
+                created_at  TEXT NOT NULL,
+                firm_id     TEXT NOT NULL DEFAULT 'default',
+                user_id     TEXT NOT NULL DEFAULT 'default'
             );
 
             CREATE INDEX IF NOT EXISTS idx_chat_messages_session
@@ -131,19 +137,48 @@ def init_db(sessions_db: str = "~/.themis/sessions.db") -> None:
             CREATE TABLE IF NOT EXISTS schema_version (version INTEGER);
         """)
 
+        # Migration: add tenant columns if missing (upgrade from schema v1).
+        # WHY: ALTER TABLE ... ADD COLUMN IF NOT EXISTS is not supported in all
+        # SQLite versions, so we use PRAGMA table_info to check first.
+        for table in ("sessions", "reminders", "chat_messages"):
+            existing = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+            if "firm_id" not in existing:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN firm_id TEXT NOT NULL DEFAULT 'default'")
+            if "user_id" not in existing:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN user_id TEXT NOT NULL DEFAULT 'default'")
+
+        # Indexes on firm_id for fast per-tenant queries.
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_sessions_firm ON sessions(firm_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_reminders_firm ON reminders(firm_id)")
+
         # Record schema version (for future migrations)
         row = conn.execute("SELECT version FROM schema_version LIMIT 1").fetchone()
         if not row:
             conn.execute("INSERT INTO schema_version (version) VALUES (?)", (SCHEMA_VERSION,))
 
 
-def save_session(state: LexState, sessions_db: str = "~/.themis/sessions.db") -> int:
+def save_session(
+    state: LexState,
+    sessions_db: str = "~/.themis/sessions.db",
+    firm_id: str = "default",
+    user_id: str = "default",
+) -> int:
     """
     Save a completed session to the database.
     Returns the new row ID.
     Called by cli.py after the graph finishes.
+
+    firm_id/user_id default to 'default' so personal-mode callers (CLI, Telegram)
+    that don't pass these params continue to work with zero changes.
+    WHY: state may also carry firm_id/user_id injected by the control plane —
+    prefer those values if present so the row lands in the right tenant partition.
     """
     init_db(sessions_db)
+
+    # Prefer tenant values already embedded in state (set by the control plane);
+    # fall back to the explicit params; fall back to 'default'.
+    resolved_firm = state.get("firm_id") or firm_id
+    resolved_user = state.get("user_id") or user_id
 
     parties = state.get("parties") or {}
     if isinstance(parties, dict):
@@ -161,8 +196,8 @@ def save_session(state: LexState, sessions_db: str = "~/.themis/sessions.db") ->
         cursor = conn.execute(
             """
             INSERT INTO sessions
-                (matter_id, created_at, matter_type, parties, jurisdiction, purpose, summary, state_json)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                (matter_id, created_at, matter_type, parties, jurisdiction, purpose, summary, state_json, firm_id, user_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 state.get("matter_id") or "",
@@ -173,17 +208,24 @@ def save_session(state: LexState, sessions_db: str = "~/.themis/sessions.db") ->
                 state.get("purpose") or "",
                 state.get("plain_english_summary") or "",
                 json.dumps(state_snapshot, ensure_ascii=False),
+                resolved_firm,
+                resolved_user,
             ),
         )
         return cursor.lastrowid
 
 
-def search_sessions(query: str, limit: int = 10, sessions_db: str = "~/.themis/sessions.db") -> List[dict]:
+def search_sessions(
+    query: str,
+    limit: int = 10,
+    sessions_db: str = "~/.themis/sessions.db",
+    firm_id: str = "default",
+) -> List[dict]:
     """
-    Full-text search over all past sessions.
+    Full-text search over sessions scoped to the given firm.
     Returns a list of session dicts sorted by relevance.
 
-    Example: search_sessions("property dispute Delhi")
+    Example: search_sessions("property dispute Delhi", firm_id="firm_a")
     """
     init_db(sessions_db)
 
@@ -195,16 +237,21 @@ def search_sessions(query: str, limit: int = 10, sessions_db: str = "~/.themis/s
             FROM sessions s
             JOIN sessions_fts fts ON s.id = fts.rowid
             WHERE sessions_fts MATCH ?
+              AND s.firm_id = ?
             ORDER BY rank
             LIMIT ?
             """,
-            (query, limit),
+            (query, firm_id, limit),
         ).fetchall()
         return [dict(row) for row in rows]
 
 
-def list_sessions(limit: int = 20, sessions_db: str = "~/.themis/sessions.db") -> List[dict]:
-    """List the most recent sessions, newest first."""
+def list_sessions(
+    limit: int = 20,
+    sessions_db: str = "~/.themis/sessions.db",
+    firm_id: str = "default",
+) -> List[dict]:
+    """List the most recent sessions for the given firm, newest first."""
     init_db(sessions_db)
 
     with _connect(sessions_db) as conn:
@@ -212,19 +259,24 @@ def list_sessions(limit: int = 20, sessions_db: str = "~/.themis/sessions.db") -
             """
             SELECT matter_id, created_at, matter_type, parties, jurisdiction, purpose, summary
             FROM sessions
+            WHERE firm_id = ?
             ORDER BY created_at DESC
             LIMIT ?
             """,
-            (limit,),
+            (firm_id, limit),
         ).fetchall()
         return [dict(row) for row in rows]
 
 
-def get_session_state(matter_id: str, sessions_db: str = "~/.themis/sessions.db") -> Optional[dict]:
+def get_session_state(
+    matter_id: str,
+    sessions_db: str = "~/.themis/sessions.db",
+    firm_id: str = "default",
+) -> Optional[dict]:
     """
-    Load the most recent state snapshot for a matter_id.
+    Load the most recent state snapshot for a matter_id, scoped to the given firm.
     Used when `lex draft --matter-id M001` continues a prior matter.
-    Returns None if no sessions exist for this matter.
+    Returns None if no sessions exist for this matter within the firm's tenant partition.
     """
     init_db(sessions_db)
 
@@ -232,11 +284,11 @@ def get_session_state(matter_id: str, sessions_db: str = "~/.themis/sessions.db"
         row = conn.execute(
             """
             SELECT state_json FROM sessions
-            WHERE matter_id = ?
+            WHERE matter_id = ? AND firm_id = ?
             ORDER BY created_at DESC
             LIMIT 1
             """,
-            (matter_id,),
+            (matter_id, firm_id),
         ).fetchone()
 
         if not row or not row["state_json"]:
@@ -244,15 +296,24 @@ def get_session_state(matter_id: str, sessions_db: str = "~/.themis/sessions.db"
         return json.loads(row["state_json"])
 
 
-def update_session(state: LexState, sessions_db: str = "~/.themis/sessions.db") -> None:
+def update_session(
+    state: LexState,
+    sessions_db: str = "~/.themis/sessions.db",
+    firm_id: str = "default",
+    user_id: str = "default",
+) -> None:
     """
     Upsert a partial session snapshot — called after every intake turn, not just on completion.
     WHY: Telegram sessions need to survive bot restarts. Saving on every turn (not just
     on completion) ensures in-progress matters can be resumed even if the bot crashes.
 
-    If a row for this matter_id already exists, replaces it. Otherwise inserts.
+    If a row for this matter_id+firm_id already exists, replaces it. Otherwise inserts.
+    The firm_id scope ensures upsert logic cannot collide across tenants.
     """
     init_db(sessions_db)
+
+    resolved_firm = state.get("firm_id") or firm_id
+    resolved_user = state.get("user_id") or user_id
 
     parties = state.get("parties") or {}
     if isinstance(parties, dict):
@@ -267,15 +328,15 @@ def update_session(state: LexState, sessions_db: str = "~/.themis/sessions.db") 
 
     with _connect(sessions_db) as conn:
         existing = conn.execute(
-            "SELECT id FROM sessions WHERE matter_id = ? ORDER BY created_at DESC LIMIT 1",
-            (state.get("matter_id") or "",),
+            "SELECT id FROM sessions WHERE matter_id = ? AND firm_id = ? ORDER BY created_at DESC LIMIT 1",
+            (state.get("matter_id") or "", resolved_firm),
         ).fetchone()
 
         if existing:
             conn.execute(
                 """
                 UPDATE sessions
-                SET matter_type=?, parties=?, jurisdiction=?, purpose=?, summary=?, state_json=?
+                SET matter_type=?, parties=?, jurisdiction=?, purpose=?, summary=?, state_json=?, user_id=?
                 WHERE id=?
                 """,
                 (
@@ -285,6 +346,7 @@ def update_session(state: LexState, sessions_db: str = "~/.themis/sessions.db") 
                     state.get("purpose") or "",
                     state.get("plain_english_summary") or "",
                     json.dumps(state_snapshot, ensure_ascii=False),
+                    resolved_user,
                     existing["id"],
                 ),
             )
@@ -292,8 +354,8 @@ def update_session(state: LexState, sessions_db: str = "~/.themis/sessions.db") 
             conn.execute(
                 """
                 INSERT INTO sessions
-                    (matter_id, created_at, matter_type, parties, jurisdiction, purpose, summary, state_json)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    (matter_id, created_at, matter_type, parties, jurisdiction, purpose, summary, state_json, firm_id, user_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     state.get("matter_id") or "",
@@ -304,6 +366,8 @@ def update_session(state: LexState, sessions_db: str = "~/.themis/sessions.db") 
                     state.get("purpose") or "",
                     state.get("plain_english_summary") or "",
                     json.dumps(state_snapshot, ensure_ascii=False),
+                    resolved_firm,
+                    resolved_user,
                 ),
             )
 
