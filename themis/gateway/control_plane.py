@@ -24,6 +24,8 @@ from pydantic import BaseModel
 
 from themis.config import LexConfig
 from themis.graph import get_graph, setup_checkpointer
+from themis.security.context import SecurityContext, Role
+from themis.security.audit import AuditAction, log_action
 from themis.state import LexState
 
 logger = logging.getLogger(__name__)
@@ -57,21 +59,44 @@ app.include_router(_voice_router, prefix="/voice")
 
 
 # ---------------------------------------------------------------------------
-# Auth
+# Auth helpers
 # ---------------------------------------------------------------------------
 
 def _get_cfg() -> LexConfig:
     return LexConfig()
 
 
+def _emit_matter_audit(
+    action: str,
+    *,
+    firm_id: str,
+    user_id: str,
+    matter_id: str,
+    detail: Optional[dict] = None,
+) -> None:
+    """Non-blocking audit call — never raises.
+
+    WHY: log_action() swallows all exceptions internally so this helper is
+    safe to call from any request handler without disrupting the response.
+    """
+    log_action(
+        action,
+        firm_id=firm_id,
+        user_id=user_id,
+        resource_type="matter",
+        resource_id=matter_id,
+        detail=detail,
+    )
+
+
 def _verify_token(
     authorization: Optional[str] = Header(None),
     cfg: LexConfig = Depends(_get_cfg),
-) -> dict:
+) -> SecurityContext:
     """
-    JWT bearer auth. Personal mode (no api_secret_key) skips auth entirely.
-    Enterprise mode verifies the JWT signed with api_secret_key and extracts
-    firm_id, user_id, and role from the token claims.
+    JWT bearer auth. Returns SecurityContext — never a bare dict.
+    Personal mode (no api_secret_key): returns SecurityContext.personal_default().
+    Enterprise mode: verifies JWT and extracts firm_id/user_id/role from claims.
 
     WHY JWT over static bearer: tokens carry identity (firm_id/user_id/role)
     so the control plane does not need a DB lookup on every request. Stolen
@@ -79,7 +104,7 @@ def _verify_token(
     """
     if not cfg.api_secret_key:
         # Personal mode — single-lawyer local dev, no auth overhead.
-        return {"firm_id": cfg.default_firm_id, "user_id": "default", "role": "admin"}
+        return SecurityContext.personal_default()
 
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing bearer token")
@@ -88,11 +113,7 @@ def _verify_token(
     try:
         from themis.security.tokens import decode_access_token
         payload = decode_access_token(token, cfg.api_secret_key)
-        return {
-            "firm_id": payload.get("firm_id", cfg.default_firm_id),
-            "user_id": payload.get("sub", "default"),
-            "role": payload.get("role", "associate"),
-        }
+        return SecurityContext.from_jwt_payload(payload, is_multi_tenant=cfg.multi_tenant)
     except Exception:
         raise HTTPException(status_code=403, detail="Invalid or expired token")
 
@@ -144,7 +165,7 @@ class DocumentViewerOut(BaseModel):
 async def send_message(
     matter_id: str,
     body: MessageIn,
-    auth: dict = Depends(_verify_token),
+    auth: SecurityContext = Depends(_verify_token),
     cfg: LexConfig = Depends(_get_cfg),
 ) -> MatterOut:
     """
@@ -154,12 +175,15 @@ async def send_message(
     WHY non-streaming here: WhatsApp / Slack webhooks need a single response payload.
     For streaming, use the WebSocket endpoint /ws/{user_id}/{matter_id}.
     """
+    _emit_matter_audit(AuditAction.MATTER_ACCESSED, firm_id=auth.firm_id,
+                       user_id=auth.user_id, matter_id=matter_id)
+
     graph = get_graph(cfg)
     langgraph_cfg = {
         "configurable": {
             "thread_id": matter_id,
-            "user_id": auth["user_id"],
-            "firm_id": auth["firm_id"],
+            "user_id": auth.user_id,
+            "firm_id": auth.firm_id,
         }
     }
 
@@ -174,8 +198,8 @@ async def send_message(
         "user_input": body.text,
         "matter_id": matter_id,
         "messages": [{"role": "user", "content": body.text}],
-        "firm_id": auth["firm_id"],
-        "user_id": auth["user_id"],
+        "firm_id": auth.firm_id,
+        "user_id": auth.user_id,
     }
     if is_new:
         state["intake_complete"] = False
@@ -188,6 +212,10 @@ async def send_message(
     except Exception as e:
         logger.error("Graph invocation error for matter %s: %s", matter_id, e)
         return MatterOut(matter_id=matter_id, status="error", error=str(e))
+
+    if final.get("draft_output"):
+        _emit_matter_audit(AuditAction.DRAFT_GENERATED, firm_id=auth.firm_id,
+                           user_id=auth.user_id, matter_id=matter_id)
 
     return MatterOut(
         matter_id=matter_id,
@@ -204,13 +232,13 @@ async def send_message(
 # ---------------------------------------------------------------------------
 
 @app.get("/api/v1/matters")
-async def list_matters(auth: dict = Depends(_verify_token)) -> JSONResponse:
+async def list_matters(auth: SecurityContext = Depends(_verify_token)) -> JSONResponse:
     """
     Return active matters for this user/tenant.
     WHY stub: full implementation requires a Postgres query over the LangGraph
     checkpoint tables. Returning an empty list for now so the web UI can connect.
     """
-    return JSONResponse(content={"matters": [], "firm_id": auth["firm_id"]})
+    return JSONResponse(content={"matters": [], "firm_id": auth.firm_id})
 
 
 # ---------------------------------------------------------------------------
@@ -224,7 +252,7 @@ async def document_viewer(
     page: Optional[int] = None,
     line: Optional[int] = None,
     anchor: Optional[str] = None,
-    auth: dict = Depends(_verify_token),
+    auth: SecurityContext = Depends(_verify_token),
 ) -> DocumentViewerOut:
     """
     Canonical target for clickable source footnotes like [F3].
@@ -251,7 +279,7 @@ async def document_viewer(
 async def upload_document(
     matter_id: str,
     file: UploadFile,
-    auth: dict = Depends(_verify_token),
+    auth: SecurityContext = Depends(_verify_token),
     cfg: LexConfig = Depends(_get_cfg),
 ) -> JSONResponse:
     """
@@ -260,6 +288,10 @@ async def upload_document(
     """
     import tempfile
     from pathlib import Path
+
+    _emit_matter_audit(AuditAction.DOCUMENT_UPLOADED, firm_id=auth.firm_id,
+                       user_id=auth.user_id, matter_id=matter_id,
+                       detail={"filename": file.filename})
 
     suffix = Path(file.filename or "upload.pdf").suffix
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
@@ -287,7 +319,7 @@ async def upload_document(
                         })
 
             qr = PersistentQdrantRetriever(
-                matter_id, firm_id=auth["firm_id"], cfg=cfg
+                matter_id, firm_id=auth.firm_id, cfg=cfg
             )
             n = qr.index_findings(text_chunks)
             logger.info("Indexed %d chunks from %s for matter %s", n, file.filename, matter_id)
@@ -327,19 +359,17 @@ async def ws_endpoint(
 
     # Auth: decode JWT before accepting the WebSocket upgrade so unauthorised
     # callers never get a connection. Personal mode (no api_secret_key) skips auth.
-    # WHY JWT here instead of the old static-secret comparison: the token carries
-    # firm_id/user_id claims, which the old approach could not provide.
-    ws_firm_id = cfg.default_firm_id
-    ws_user_id = user_id
+    # WHY SecurityContext here: uniform identity object across REST and WS paths —
+    # no special-casing of dict vs dataclass downstream.
+    ctx = SecurityContext.personal_default()
     if cfg.api_secret_key:
         if not token:
             await websocket.close(code=4403)
             return
         try:
             from themis.security.tokens import decode_access_token
-            claims = decode_access_token(token, cfg.api_secret_key)
-            ws_firm_id = claims.get("firm_id", cfg.default_firm_id)
-            ws_user_id = claims.get("sub", user_id)
+            payload = decode_access_token(token, cfg.api_secret_key)
+            ctx = SecurityContext.from_jwt_payload(payload, is_multi_tenant=cfg.multi_tenant)
         except Exception:
             await websocket.close(code=4403)
             return
@@ -350,8 +380,8 @@ async def ws_endpoint(
     langgraph_cfg = {
         "configurable": {
             "thread_id": matter_id,
-            "user_id": ws_user_id,
-            "firm_id": ws_firm_id,
+            "user_id": ctx.user_id,
+            "firm_id": ctx.firm_id,
         }
     }
 
@@ -369,8 +399,8 @@ async def ws_endpoint(
             "user_input": user_text,
             "matter_id": matter_id,
             "messages": [{"role": "user", "content": user_text}],
-            "firm_id": ws_firm_id,
-            "user_id": ws_user_id,
+            "firm_id": ctx.firm_id,
+            "user_id": ctx.user_id,
         }
         if is_new:
             state["intake_complete"] = False
@@ -427,7 +457,7 @@ async def ws_endpoint(
 async def halt_run(
     matter_id: str,
     run_id: str,
-    claims: dict = Depends(_verify_token),
+    claims: SecurityContext = Depends(_verify_token),
     cfg: LexConfig = Depends(_get_cfg),
 ) -> JSONResponse:
     """
@@ -471,7 +501,7 @@ async def halt_run(
 
         logger.info(
             "Run %s halted by user=%s: %d jobs cancelled",
-            run_id, claims.get("user_id"), cancelled_count,
+            run_id, claims.user_id, cancelled_count,
         )
         return JSONResponse({"halted": True, "run_id": run_id, "jobs_cancelled": cancelled_count})
 
