@@ -299,3 +299,12 @@ def test_personal_mode_path_unchanged(tmp_path):
     save_matter_memory("M001", _minimal_state("M001"), matters_dir=matters_dir)
     expected = tmp_path / "matters" / "M001" / "MEMORY.md"
     assert expected.exists(), "Personal mode must not add firm partition"
+
+
+def test_load_matter_memory_wrong_firm_returns_none(tmp_path):
+    """load_matter_memory with wrong firm_id must return None — not leak firm_a data."""
+    matters_dir = str(tmp_path / "matters")
+    save_matter_memory("M001", _minimal_state("M001"), matters_dir=matters_dir, firm_id="firm_a")
+
+    result = load_matter_memory("M001", matters_dir=matters_dir, firm_id="firm_b")
+    assert result is None, "firm_b must not read firm_a's MEMORY.md"
