@@ -591,6 +591,7 @@ def _save_session_and_memory(state: LexState, cfg: LexConfig) -> None:
             state.get("matter_id") or "unknown",
             state,
             cfg.matters_dir,
+            firm_id=cfg.default_firm_id,
         )
         console.print(
             f"\n[dim]✓ Session saved (ID: {session_id}) | "
@@ -1219,7 +1220,7 @@ def matter_list() -> None:
     from themis.memory.matter_memory import list_matters
 
     cfg = LexConfig()
-    matters = list_matters(cfg.matters_dir)
+    matters = list_matters(cfg.matters_dir, firm_id=cfg.default_firm_id)
 
     if not matters:
         console.print("[yellow]No matters saved yet. Run [bold]lex draft[/bold] to create your first.[/yellow]")
@@ -1250,7 +1251,7 @@ def matter_show(matter_id: str = typer.Argument(..., help="Matter ID to display"
     from themis.memory.matter_memory import load_matter_memory
 
     cfg = LexConfig()
-    memory = load_matter_memory(matter_id, cfg.matters_dir)
+    memory = load_matter_memory(matter_id, cfg.matters_dir, firm_id=cfg.default_firm_id)
 
     if not memory:
         console.print(f"[red]No memory found for matter {matter_id}.[/red]")
@@ -2104,13 +2105,13 @@ def contract_lifecycle_cmd(
             "contract_lifecycle": status,
             "user_input": f"[lifecycle update] {status} — {dt.now().strftime('%Y-%m-%d %H:%M')}",
         }
-        save_matter_memory(matter_id, pseudo_state, cfg.matters_dir)  # type: ignore[arg-type]
+        save_matter_memory(matter_id, pseudo_state, cfg.matters_dir, firm_id=cfg.default_firm_id)  # type: ignore[arg-type]
         color = _STAGE_COLORS.get(status, "cyan")
         console.print(f"\n[{color}]✓ Matter {matter_id} → [{status}][/{color}]\n")
         return
 
     # Show current lifecycle status from memory
-    memory = load_matter_memory(matter_id, cfg.matters_dir)
+    memory = load_matter_memory(matter_id, cfg.matters_dir, firm_id=cfg.default_firm_id)
     if not memory:
         console.print(f"[red]No matter found: {matter_id}[/red]")
         raise typer.Exit(1)
