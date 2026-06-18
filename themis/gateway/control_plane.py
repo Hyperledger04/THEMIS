@@ -115,6 +115,14 @@ def _verify_token(
         payload = decode_access_token(token, cfg.api_secret_key)
         return SecurityContext.from_jwt_payload(payload, is_multi_tenant=cfg.multi_tenant)
     except Exception:
+        log_action(
+            AuditAction.AUTH_LOGIN,
+            firm_id=cfg.default_firm_id,
+            user_id="unknown",
+            resource_type="auth",
+            resource_id="token",
+            detail={"reason": "invalid_or_expired"},
+        )
         raise HTTPException(status_code=403, detail="Invalid or expired token")
 
 
@@ -374,7 +382,14 @@ async def ws_endpoint(
             await websocket.close(code=4403)
             return
 
+    # WHY: prevents a valid-JWT holder from connecting to /ws/victim_user_id/matter_id
+    if cfg.api_secret_key and user_id != ctx.user_id:
+        await websocket.close(code=4403)
+        return
+
     await websocket.accept()
+    _emit_matter_audit(AuditAction.MATTER_ACCESSED, firm_id=ctx.firm_id,
+                       user_id=ctx.user_id, matter_id=matter_id)
     graph = get_graph(cfg)
 
     langgraph_cfg = {
@@ -502,6 +517,14 @@ async def halt_run(
         logger.info(
             "Run %s halted by user=%s: %d jobs cancelled",
             run_id, claims.user_id, cancelled_count,
+        )
+        log_action(
+            AuditAction.JOB_HALTED,
+            firm_id=claims.firm_id,
+            user_id=claims.user_id,
+            resource_type="run",
+            resource_id=run_id,
+            detail={"matter_id": matter_id, "jobs_cancelled": cancelled_count},
         )
         return JSONResponse({"halted": True, "run_id": run_id, "jobs_cancelled": cancelled_count})
 
