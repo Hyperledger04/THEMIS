@@ -11,7 +11,9 @@
 # works offline, and ships with Python's standard library. Perfect for a
 # lawyer's laptop that may not have Docker installed.
 
+import functools
 import json
+import logging
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime
@@ -20,7 +22,49 @@ from typing import Generator, List, Optional
 
 from themis.state import LexState
 
+_logger = logging.getLogger(__name__)
+
+
+@functools.lru_cache(maxsize=1)
+def _session_cfg():
+    """Cached LexConfig — encryption settings are deployment-time, not per-request."""
+    from themis.config import LexConfig
+    return LexConfig()
+
 SCHEMA_VERSION = 2
+
+
+def _encrypt_state(raw_json: str, firm_id: str = "default") -> str:
+    """
+    Encrypt state_json string if encryption is enabled. Returns hex ciphertext.
+    In personal mode (no encryption_key), returns the JSON string unchanged.
+
+    WHY: state_json contains matter facts and party names. At-rest encryption
+    ensures a stolen database file cannot be read without the master key.
+    """
+    try:
+        from themis.security.crypto import is_encryption_enabled, encrypt_str
+        cfg = _session_cfg()
+        if is_encryption_enabled(cfg) and cfg.encryption_key:
+            return encrypt_str(raw_json, cfg.encryption_key, firm_id)
+    except Exception as e:
+        _logger.warning("state_json encryption failed, storing plaintext: %s", e)
+    return raw_json
+
+
+def _decrypt_state(stored: str, firm_id: str = "default") -> str:
+    """
+    Decrypt state_json if encrypted (has LEXENC: sentinel). Returns JSON string.
+    Plaintext strings are returned unchanged (personal mode / pre-encryption rows).
+    """
+    try:
+        from themis.security.crypto import decrypt_str
+        cfg = _session_cfg()
+        if cfg.encryption_key:
+            return decrypt_str(stored, cfg.encryption_key, firm_id)
+    except Exception as e:
+        _logger.warning("state_json decryption failed, returning raw value: %s", e)
+    return stored
 
 
 def db_path(sessions_db: str = "~/.themis/sessions.db") -> Path:
@@ -217,7 +261,7 @@ def save_session(
                 state.get("jurisdiction") or "",
                 state.get("purpose") or "",
                 state.get("plain_english_summary") or "",
-                json.dumps(state_snapshot, ensure_ascii=False),
+                _encrypt_state(json.dumps(state_snapshot, ensure_ascii=False), resolved_firm),
                 resolved_firm,
                 resolved_user,
             ),
@@ -303,7 +347,8 @@ def get_session_state(
 
         if not row or not row["state_json"]:
             return None
-        return json.loads(row["state_json"])
+        raw = _decrypt_state(row["state_json"], firm_id)
+        return json.loads(raw)
 
 
 def update_session(
@@ -355,7 +400,7 @@ def update_session(
                     state.get("jurisdiction") or "",
                     state.get("purpose") or "",
                     state.get("plain_english_summary") or "",
-                    json.dumps(state_snapshot, ensure_ascii=False),
+                    _encrypt_state(json.dumps(state_snapshot, ensure_ascii=False), resolved_firm),
                     resolved_user,
                     existing["id"],
                 ),
@@ -375,7 +420,7 @@ def update_session(
                     state.get("jurisdiction") or "",
                     state.get("purpose") or "",
                     state.get("plain_english_summary") or "",
-                    json.dumps(state_snapshot, ensure_ascii=False),
+                    _encrypt_state(json.dumps(state_snapshot, ensure_ascii=False), resolved_firm),
                     resolved_firm,
                     resolved_user,
                 ),

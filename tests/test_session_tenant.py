@@ -1,4 +1,4 @@
-"""Tests for session store tenant isolation and schema migration."""
+"""Tests for session store tenant isolation, schema migration, and AES-GCM encryption."""
 import json
 import sqlite3
 import tempfile
@@ -98,3 +98,58 @@ def test_update_session_is_firm_scoped(tmp_db):
     result_b = get_session_state("M001", sessions_db=tmp_db, firm_id="firm_b")
     assert result_b is not None
     assert result_b["purpose"] == "firm_b_purpose"
+
+
+# ── AES-GCM encryption of state_json ────────────────────────────────────────
+
+import os
+
+
+def test_state_json_encrypted_when_key_set(tmp_db, monkeypatch):
+    """When LEX_ENCRYPTION_KEY and LEX_MULTI_TENANT are set, state_json must be encrypted."""
+    from themis.memory.session_store import _session_cfg
+    _session_cfg.cache_clear()  # ensure fresh LexConfig with monkeypatched env
+    monkeypatch.setenv("LEX_ENCRYPTION_KEY", "a" * 64)   # 64 hex chars = 32 bytes
+    monkeypatch.setenv("LEX_MULTI_TENANT", "true")
+
+    state = _make_state("M-ENC")
+    save_session(state, sessions_db=tmp_db, firm_id="firm_enc", user_id="u1")
+
+    conn = sqlite3.connect(tmp_db)
+    row = conn.execute("SELECT state_json FROM sessions WHERE matter_id='M-ENC'").fetchone()
+    conn.close()
+
+    raw_blob = row[0]
+    # LEXENC: prefix is 7 bytes = "LEXENC:" in ASCII; when hex-encoded it's 14 chars "4c455845" prefix
+    # Actually the sentinel is stored as hex string starting with the hex of "LEXENC:"
+    assert "M-ENC" not in raw_blob, "Plaintext matter_id must NOT appear in encrypted blob"
+
+
+def test_state_json_decrypts_correctly(tmp_db, monkeypatch):
+    """get_session_state must transparently decrypt and return the original state."""
+    from themis.memory.session_store import _session_cfg
+    _session_cfg.cache_clear()
+    monkeypatch.setenv("LEX_ENCRYPTION_KEY", "a" * 64)
+    monkeypatch.setenv("LEX_MULTI_TENANT", "true")
+
+    state = _make_state("M-ENC2")
+    save_session(state, sessions_db=tmp_db, firm_id="firm_enc", user_id="u1")
+
+    recovered = get_session_state("M-ENC2", sessions_db=tmp_db, firm_id="firm_enc")
+    assert recovered is not None
+    assert recovered["matter_id"] == "M-ENC2"
+
+
+def test_state_json_plaintext_when_no_key(tmp_db):
+    """Without LEX_ENCRYPTION_KEY, state_json must be plaintext JSON."""
+    from themis.memory.session_store import _session_cfg
+    _session_cfg.cache_clear()  # ensure no leaked encryption key from prior test
+    state = _make_state("M-PLAIN")
+    save_session(state, sessions_db=tmp_db, firm_id="default", user_id="u1")
+
+    conn = sqlite3.connect(tmp_db)
+    row = conn.execute("SELECT state_json FROM sessions WHERE matter_id='M-PLAIN'").fetchone()
+    conn.close()
+
+    parsed = json.loads(row[0])   # must parse as JSON without decryption
+    assert parsed["matter_id"] == "M-PLAIN"
