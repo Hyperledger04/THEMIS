@@ -280,3 +280,57 @@ def test_ws_accepts_correct_token(client):
             ws.send_text(json.dumps({"text": "I need to draft an injunction."}))
             done = ws.receive_json()
             assert done["type"] == "done"
+
+
+# ── Phase 1: SecurityContext wiring ─────────────────────────────────────────
+
+from themis.security.context import SecurityContext, Role
+
+
+def test_verify_token_returns_security_context_in_personal_mode():
+    """_verify_token in personal mode must return SecurityContext, not dict."""
+    from themis.gateway.control_plane import _verify_token
+    from themis.config import LexConfig
+
+    cfg = LexConfig(api_secret_key=None)
+    result = _verify_token(authorization=None, cfg=cfg)
+
+    assert isinstance(result, SecurityContext), (
+        f"Expected SecurityContext, got {type(result).__name__}"
+    )
+    assert result.role == Role.ADMIN
+    assert result.firm_id == cfg.default_firm_id
+
+
+def test_verify_token_enterprise_decodes_jwt():
+    """_verify_token in enterprise mode must decode JWT and return SecurityContext."""
+    from themis.security.tokens import generate_access_token
+    from themis.gateway.control_plane import _verify_token
+    from themis.config import LexConfig
+
+    secret = "test-secret-key-32-chars-padding!"
+    token = generate_access_token("u1", "firm_x", "associate", secret)
+    cfg = LexConfig(api_secret_key=secret)
+
+    ctx = _verify_token(authorization=f"Bearer {token}", cfg=cfg)
+
+    assert isinstance(ctx, SecurityContext)
+    assert ctx.firm_id == "firm_x"
+    assert ctx.user_id == "u1"
+    assert ctx.role == Role.ASSOCIATE
+
+
+def test_emit_matter_audit_calls_log_action(monkeypatch):
+    """_emit_matter_audit must call log_action with the correct action."""
+    calls = []
+    monkeypatch.setattr(
+        "themis.gateway.control_plane.log_action",
+        lambda action, **kw: calls.append(action),
+    )
+
+    from themis.security.audit import AuditAction
+    from themis.gateway.control_plane import _emit_matter_audit
+
+    _emit_matter_audit(AuditAction.MATTER_ACCESSED, firm_id="f1", user_id="u1", matter_id="M1")
+
+    assert AuditAction.MATTER_ACCESSED in calls
