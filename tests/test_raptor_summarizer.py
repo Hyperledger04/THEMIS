@@ -148,3 +148,34 @@ def test_raptor_tree_to_findings_structure():
     findings = raptor_tree_to_findings(tree)
     assert findings[0]["case_name"] == "RAPTOR Summary (layer 2)"
     assert findings[0]["source_chunks"] == ["a::0", "b::1"]
+
+
+# -----------------------------------------------------------------------
+# CRIT: raptor_tree_to_findings — citation field must never be None
+# -----------------------------------------------------------------------
+
+def _make_test_tree() -> list[RaptorNode]:
+    """Build minimal test nodes: one layer-0 (excluded) and three layer-1+ (included)."""
+    return [
+        RaptorNode(layer=0, text="Original chunk.", source_chunks=["doc::0"]),
+        RaptorNode(layer=1, text="Summary of cluster.", source_chunks=["doc::0", "doc::1"]),
+        RaptorNode(layer=2, text="Higher summary.", source_chunks=["doc::0"]),
+        # Edge case: node with empty source_chunks
+        RaptorNode(layer=1, text="Summary with no sources.", source_chunks=[]),
+    ]
+
+
+def test_raptor_tree_to_findings_citation_is_never_none():
+    """citation field must be a non-empty string — HybridRetriever does string ops on it."""
+    findings = raptor_tree_to_findings(_make_test_tree())
+
+    # Only layer >= 1 nodes are returned (layer 0 is filtered out)
+    assert len(findings) == 3, f"Expected 3 findings (layer 1+), got {len(findings)}"
+
+    for f in findings:
+        assert f["citation"] is not None, "citation must not be None"
+        assert isinstance(f["citation"], str), f"citation must be str, got {type(f['citation'])}"
+        assert f["citation"] != "", "citation must not be empty string"
+        # Must be parseable as a RAPTOR reference
+        assert "raptor" in f["citation"].lower() or ":" in f["citation"], \
+            f"citation should be a raptor: reference, got {f['citation']}"

@@ -197,7 +197,7 @@ def raptor_tree_to_findings(tree: list[RaptorNode]) -> list[dict]:
         if node.layer >= 1:
             summaries.append({
                 "case_name": f"RAPTOR Summary (layer {node.layer})",
-                "citation": None,
+                "citation": f"raptor:layer{node.layer}:{','.join((node.source_chunks or [])[:2])}",
                 "snippet": node.text[:500],
                 "full_text": node.text,
                 "source": "raptor_summary",
