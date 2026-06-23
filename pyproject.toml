@@ -36,6 +36,9 @@ dependencies = [
     # R1: Kanoon REST API client
     "httpx>=0.27",
     "prompt-toolkit>=3.0.52",
+    # V3.1: SQLAlchemy async ORM + Alembic for the canonical matter store
+    "sqlalchemy[asyncio]>=2.0",
+    "alembic>=1.13",
 ]
 
 [project.optional-dependencies]
