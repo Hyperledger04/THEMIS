@@ -33,7 +33,7 @@ from fastapi import APIRouter, Form, Request, Response, WebSocket, WebSocketDisc
 from fastapi.responses import HTMLResponse, PlainTextResponse
 from themis.config import LexConfig
 from themis.graph import get_graph
-from themis.state import LexState
+from themis.state import SeniorCounselState
 from themis.voice.session import VoiceSession, get_voice_session_store
 from themis.voice.stt import get_stt_backend
 from themis.voice.tts import get_tts_backend
@@ -91,7 +91,7 @@ async def _run_voice_turn(
         field_name = session.awaiting_free_text_for
         session.awaiting_free_text_for = None
         # Inject the answer into state and continue from where we paused
-        state: LexState = {  # type: ignore[assignment]
+        state: SeniorCounselState = {  # type: ignore[assignment]
             "user_input": user_text,
             "matter_id": session.matter_id,
             "messages": [{"role": "user", "content": f"{field_name}: {user_text}"}],

@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Optional
 
 from themis.config import LexConfig
-from themis.state import LexState
+from themis.state import SeniorCounselState
 
 _WISDOM_FILENAME = "wisdom.md"
 
@@ -65,7 +65,7 @@ def _append_wisdom(new_yaml: str, home_dir: str = "~/.themis") -> None:
         f.write(new_yaml.strip() + "\n")
 
 
-async def extract_and_save_wisdom(state: LexState, cfg: LexConfig) -> None:
+async def extract_and_save_wisdom(state: SeniorCounselState, cfg: LexConfig) -> None:
     """
     Background Haiku call: extract 2-4 insights from a completed draft and
     append them to wisdom.md. Runs fire-and-forget after draft delivery.

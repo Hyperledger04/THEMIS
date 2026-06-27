@@ -12,7 +12,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from themis.state import LexState
+from themis.state import SeniorCounselState
 
 MEMORY_FILENAME = "MEMORY.md"
 STATE_FILENAME = "state.json"
@@ -56,7 +56,7 @@ def load_matter_memory(
 
 def save_matter_memory(
     matter_id: str,
-    state: LexState,
+    state: SeniorCounselState,
     matters_dir: str = "~/.themis/matters",
     firm_id: str = "default",
 ) -> Path:
@@ -235,7 +235,7 @@ async def maybe_compress_memory(matter_id: str, matters_dir: str, threshold: int
         pass
 
 
-def _save_state_snapshot(matter_id: str, state: LexState, mdir: Path) -> None:
+def _save_state_snapshot(matter_id: str, state: SeniorCounselState, mdir: Path) -> None:
     """
     Save a JSON snapshot of the state (serialisable fields only).
     The messages list contains LangChain message objects which are not JSON-serialisable,

@@ -3,11 +3,16 @@
 # Nothing is stored inside the nodes themselves. Everything lives in state.
 # When a node returns a dict, LangGraph merges only those keys into the existing state.
 # You never return the full state — just the keys you changed.
+#
+# V3.2 — State Split:
+#   - SeniorCounselState replaces the old flat LexState (all existing fields preserved).
+#   - Four child TypedDicts scope state per specialist subgraph (used from V3.3 onward).
+#   - LexState alias kept at the bottom for backward compatibility; remove in V3.3 cleanup.
 
 from typing import List, Optional, TypedDict
 
 
-class LexState(TypedDict):
+class SeniorCounselState(TypedDict):
     # --- Input ---
     user_input: str                           # Raw matter brief from the lawyer
     matter_id: Optional[str]                  # Unique ID for this matter (e.g. "M-20240501-001")
@@ -153,6 +158,17 @@ class LexState(TypedDict):
     redline_source_path: Optional[str]   # original .docx to diff against
     redline_output_path: Optional[str]   # path written by review node
 
+    # --- V3.3: Senior Counsel coordination ---
+    # WHY: execution_plan drives the coordinate → send() loop. Each entry is popped
+    # after the specialist completes, so coordinate always looks at plan[0] for next.
+    execution_plan:      Optional[List[dict]]   # [{"specialist": "researcher", "params": {}}]
+    active_specialist:   Optional[str]           # specialist currently being dispatched
+    # WHY: status mirrors the Postgres matter_status enum so persist_matter() can sync.
+    status:              Optional[str]           # matter workflow status
+    # Handoff slots — Senior Counsel reads these after each specialist completes.
+    review_result:       Optional[dict]          # {passed: bool, issues: [...], risk_score: float}
+    verification_result: Optional[dict]          # {verified: [...], failed: [...], confidence: {}}
+
     # --- Chamber review (doc-haus Feature 2) ---
     chamber_enabled: Optional[bool]      # activated by --chamber flag or contract_review
     chamber_issues: Optional[str]        # Reviewer LLM output
@@ -162,3 +178,65 @@ class LexState(TypedDict):
     # --- Grid analysis (doc-haus Feature 3) ---
     grid_questions: Optional[List[str]]  # questions to run across all matter docs
     grid_results: Optional[dict]         # {question: {doc_name: answer}}
+
+
+# ---------------------------------------------------------------------------
+# V3.2 — Specialist child TypedDicts (used by subgraphs from V3.3 onward)
+# Each specialist receives only the fields it needs; it never reads the full
+# SeniorCounselState.  Senior Counsel copies relevant keys in before dispatch
+# and merges handoff slots back after the subgraph completes.
+# ---------------------------------------------------------------------------
+
+class ResearcherState(TypedDict):
+    matter_id:            str
+    matter_type:          Optional[str]
+    jurisdiction:         Optional[str]
+    parties:              Optional[dict]
+    purpose:              Optional[str]
+    search_queries:       List[str]
+    tool_calls_log:       List[dict]
+    research_findings:    List[dict]   # [{title, citation, doc_excerpt, url, verified: bool}]
+    statutes_cited:       List[str]
+    limitation_analysis:  Optional[str]
+    thread_messages:      List[dict]   # internal audit trail — never shown to lawyer
+
+
+class DrafterState(TypedDict):
+    matter_id:              str
+    matter_type:            Optional[str]
+    jurisdiction:           Optional[str]
+    parties:                Optional[dict]
+    research_findings:      List[dict]
+    lawyer_soul:            Optional[str]
+    active_skill:           Optional[str]
+    draft_output:           Optional[str]
+    plain_english_summary:  Optional[str]
+    risk_annotations:       List[dict]
+    thread_messages:        List[dict]
+
+
+class ReviewerState(TypedDict):
+    matter_id:              str
+    draft_output:           str
+    research_findings:      List[dict]
+    matter_type:            Optional[str]
+    review_result:          dict         # {passed: bool, issues: [...], risk_score: float}
+    unverified_citations:   List[dict]
+    citations_verified:     bool
+    thread_messages:        List[dict]
+
+
+class VerificationState(TypedDict):
+    matter_id:              str
+    unverified_citations:   List[dict]   # [{title, citation, doc_excerpt, url}]
+    lawyer_approved:        bool
+    verification_result:    dict         # {verified: [...], failed: [...], confidence: {}}
+    thread_messages:        List[dict]
+
+
+# ---------------------------------------------------------------------------
+# Backward-compat alias — all existing nodes and tests import LexState;
+# they resolve to SeniorCounselState transparently.
+# WHY: removing this alias is a V3.3 cleanup task, not V3.2 scope.
+# ---------------------------------------------------------------------------
+LexState = SeniorCounselState

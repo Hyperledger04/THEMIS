@@ -7,10 +7,10 @@ import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.graph.message import add_messages
 
-from themis.state import LexState
+from themis.state import SeniorCounselState
 
 
-def _minimal_state() -> LexState:
+def _minimal_state() -> SeniorCounselState:
     """Returns a minimal valid LexState with only required fields set."""
     return {
         "user_input": "I need an injunction",
@@ -77,7 +77,7 @@ class TestLexStateFields:
 
     def test_all_required_fields_exist(self):
         """Verify LexState has all fields defined in the TypedDict."""
-        hints = get_type_hints(LexState)
+        hints = get_type_hints(SeniorCounselState)
         required = [
             "user_input", "intake_complete", "citations_verified", "messages",
             "matter_type", "parties", "jurisdiction", "purpose",
@@ -145,12 +145,12 @@ class TestPhase7Fields:
 
     def test_workflow_mode_field_exists(self):
         from typing import get_type_hints
-        hints = get_type_hints(LexState)
+        hints = get_type_hints(SeniorCounselState)
         assert "workflow_mode" in hints
 
     def test_contract_fields_exist(self):
         from typing import get_type_hints
-        hints = get_type_hints(LexState)
+        hints = get_type_hints(SeniorCounselState)
         assert "contract_upload_path" in hints
         assert "contract_risk_analysis" in hints
         assert "contract_review_output" in hints

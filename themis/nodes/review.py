@@ -11,7 +11,7 @@
 from rich.console import Console
 
 from themis.courts import CourtDraftSpec, load_spec
-from themis.state import LexState
+from themis.state import SeniorCounselState
 
 console = Console()
 
@@ -242,7 +242,7 @@ def _check_placeholder_leakage(filing_body: str) -> list[str]:
     return patterns
 
 
-async def run(state: LexState) -> dict:
+async def run(state: SeniorCounselState) -> dict:
     try:
         from themis.tools.docx_writer import _split_draft  # local import to avoid circularity
 

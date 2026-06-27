@@ -63,6 +63,32 @@ class LexConfig(BaseSettings):
     )
 
     # ----------------------------------------------------------------
+    # V3.3: Specialist agent models (user-configurable per §6.2 of V3 architecture)
+    # WHY: Lawyer controls cost/quality trade-off. Drafter uses opus (it is the product);
+    # researcher and reviewer use sonnet (cheaper, still accurate for retrieval/review).
+    # ----------------------------------------------------------------
+    senior_counsel_model: str = Field(
+        "claude-opus-4-8",
+        validation_alias=AliasChoices("LEX_SENIOR_COUNSEL_MODEL", "senior_counsel_model"),
+    )
+    researcher_model: str = Field(
+        "claude-sonnet-4-6",
+        validation_alias=AliasChoices("LEX_RESEARCHER_MODEL", "researcher_model"),
+    )
+    drafter_model: str = Field(
+        "claude-opus-4-8",
+        validation_alias=AliasChoices("LEX_DRAFTER_MODEL", "drafter_model"),
+    )
+    reviewer_model: str = Field(
+        "claude-sonnet-4-6",
+        validation_alias=AliasChoices("LEX_REVIEWER_MODEL", "reviewer_model"),
+    )
+    verification_model: str = Field(
+        "claude-sonnet-4-6",
+        validation_alias=AliasChoices("LEX_VERIFICATION_MODEL", "verification_model"),
+    )
+
+    # ----------------------------------------------------------------
     # Paths — all under ~/.themis by default
     # WHY: ~/.themis keeps lawyer data out of the project directory,
     # preventing accidental git commits of sensitive client matter data.

@@ -13,7 +13,7 @@ import yaml
 from themis.config import LexConfig
 from themis.memory.soul import load_soul
 from themis.skills.loader import load_skill, load_skill_stack
-from themis.state import LexState
+from themis.state import SeniorCounselState
 
 # Core fields always required regardless of matter type.
 _CORE_FIELDS = ["matter_type", "parties", "jurisdiction", "purpose"]
@@ -107,7 +107,7 @@ def _skill_display_name(matter_type: str) -> str:
 
 def _get_unanswered_questions(
     questions: list[dict],
-    state: LexState,
+    state: SeniorCounselState,
 ) -> list[dict]:
     """Return questions whose field has not yet been answered in state."""
     unanswered = []
@@ -123,7 +123,7 @@ def _get_unanswered_questions(
 def _build_question_bank_prompt(
     matter_type: Optional[str],
     bank: dict,
-    state: LexState,
+    state: SeniorCounselState,
     soul: Optional[dict],
 ) -> str:
     """
@@ -243,7 +243,7 @@ Rules for clarifying_questions:
 """
 
 
-async def run(state: LexState) -> dict:
+async def run(state: SeniorCounselState) -> dict:
     """
     Intake node: collects required matter information from the lawyer.
 
@@ -384,11 +384,11 @@ async def run(state: LexState) -> dict:
         return {"error": f"Intake node failed: {e}", "intake_complete": False}
 
 
-def _all_core_fields_present(state: LexState) -> bool:
+def _all_core_fields_present(state: SeniorCounselState) -> bool:
     return all(bool(state.get(f)) for f in _CORE_FIELDS)
 
 
-def _matter_type_complete(state: LexState) -> bool:
+def _matter_type_complete(state: SeniorCounselState) -> bool:
     """
     Check if all required fields for the detected matter type are present.
     Falls back to core-fields-only check if no question bank matches.

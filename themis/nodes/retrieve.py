@@ -10,7 +10,7 @@ import logging
 from pathlib import Path
 
 from themis.config import LexConfig
-from themis.state import LexState
+from themis.state import SeniorCounselState
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +58,7 @@ def _match_template(matter_type: str, user_input: str, index: dict[str, str]) ->
     return None
 
 
-async def run(state: LexState) -> dict:
+async def run(state: SeniorCounselState) -> dict:
     """
     Retrieve gold-standard templates and past-draft examples for the draft node.
     Returns retrieval_chunks: list of {type, content, source} dicts.

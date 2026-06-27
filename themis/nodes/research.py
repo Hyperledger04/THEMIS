@@ -8,7 +8,7 @@ import re
 from rich.console import Console
 
 from themis.config import LexConfig
-from themis.state import LexState
+from themis.state import SeniorCounselState
 
 # WHY: Importing limitation here ensures @ToolRegistry.register fires at startup.
 # Tools self-register on first import — no explicit registration call needed.
@@ -41,7 +41,7 @@ _STATUTE_RE = re.compile(
 )
 
 
-def _build_search_query(state: LexState) -> str:
+def _build_search_query(state: SeniorCounselState) -> str:
     """Build an Indian Kanoon query from the intake fields collected so far."""
     parts: list[str] = []
     if matter_type := state.get("matter_type"):
@@ -56,7 +56,7 @@ def _build_search_query(state: LexState) -> str:
     return " ".join(parts)
 
 
-def _build_parallel_queries(state: LexState) -> list[str]:
+def _build_parallel_queries(state: SeniorCounselState) -> list[str]:
     """
     Build 2-3 complementary search queries for parallel execution.
     Each angle targets a different retrieval dimension so the combined
@@ -122,7 +122,7 @@ def _tool_active(config_flag: bool, approved_tools, tool_name: str) -> bool:
     return approved_tools is None or tool_name in (approved_tools or [])
 
 
-async def run(state: LexState) -> dict:
+async def run(state: SeniorCounselState) -> dict:
     config = LexConfig()
 
     # WHY: when kanoon_backend=api AND Kanoon is enabled, delegate to the ReAct

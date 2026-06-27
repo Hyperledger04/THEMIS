@@ -43,7 +43,7 @@ from telegram.ext import (
 
 from themis.config import LexConfig
 from themis.graph import get_graph, setup_checkpointer
-from themis.state import LexState
+from themis.state import SeniorCounselState
 
 console = Console()
 logger = logging.getLogger(__name__)
@@ -390,7 +390,7 @@ async def _run_graph_for_user(
         _prior_complete = bool(session.graph_state.get("intake_complete")) and all(
             bool(session.graph_state.get(f)) for f in _core
         )
-        state: LexState = {  # type: ignore[assignment]
+        state: SeniorCounselState = {  # type: ignore[assignment]
             "user_input": initial_brief,
             "matter_id": session.matter_id,
             "messages": [{"role": "user", "content": initial_brief}],

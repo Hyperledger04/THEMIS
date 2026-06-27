@@ -27,7 +27,7 @@ from typing import Any
 from rich.console import Console
 
 from themis.config import LexConfig
-from themis.state import LexState
+from themis.state import SeniorCounselState
 
 console = Console()
 
@@ -216,7 +216,7 @@ async def _run_tavily_search(query: str, cfg: LexConfig) -> list[dict]:
 # Main node
 # ---------------------------------------------------------------------------
 
-async def run(state: LexState) -> dict:
+async def run(state: SeniorCounselState) -> dict:
     """
     API-first research node with citation enforcement gate.
 

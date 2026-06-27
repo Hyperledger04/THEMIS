@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LexAgent (Themis) — Course</title>
+
+<!-- marked.js for markdown → HTML (version pinned; integrity hash verified) -->
+<script src="https://cdn.jsdelivr.net/npm/marked@11.2.0/marked.min.js"
+        integrity="sha384-9Md4MlJk24bo2Ifubp0FbKhuES4/iAwyTGMeWpBG4RoHGTKygpEGEpOYhEQxbfa9"
+        crossorigin="anonymous"></script>
+<!-- highlight.js for syntax highlighting (hashes verified against cdnjs API) -->
+<link rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css"
+      integrity="sha512-Jk4AqjWsdSzSWCSuQTfYRIF84Rq/eV0G2+tu07byYwHcbTGfdmLrHjUSwvzp5HvbiqK4ibmNwdcG49Y5RGYPTg=="
+      crossorigin="anonymous">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"
+        integrity="sha512-D9gUyxqja7hBtkWpPWGt9wfbfaMGVt9gnyCvYa+jojwwPHLCzUm5i8rpk7vD7wNee9bA35eYIjobYPaQuKS1MQ=="
+        crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js"
+        integrity="sha512-wW8K3TEH5ZViD4aMPzwPdhXKs/Kb5MAm7qLRd3QliYlHy0u9utSKZsZzqlZAgJ9xxXp81acwnrZVZ8oTfoLG1g=="
+        crossorigin="anonymous"></script>
+
+<style>
+  /* ── Reset & base ─────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #0d1117;
+    --bg2:       #161b22;
+    --bg3:       #21262d;
+    --border:    #30363d;
+    --text:      #e6edf3;
+    --muted:     #8b949e;
+    --accent:    #58a6ff;
+    --accent2:   #3fb950;
+    --warn:      #d29922;
+    --badge-done:#238636;
+    --badge-wip: #1f6feb;
+    --sidebar-w: 280px;
+    --header-h:  56px;
+  }
+
+  html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.6; }
+
+  /* ── Layout ───────────────────────────────────────────────── */
+  #app { display: flex; flex-direction: column; height: 100vh; }
+
+  header {
+    height: var(--header-h); background: var(--bg2); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; padding: 0 20px; gap: 12px; flex-shrink: 0;
+    position: sticky; top: 0; z-index: 100;
+  }
+  header .logo { font-size: 18px; font-weight: 700; color: var(--text); letter-spacing: -0.5px; }
+  header .logo span { color: var(--accent); }
+  header .sub { color: var(--muted); font-size: 12px; margin-left: 4px; }
+  header .progress-pill {
+    margin-left: auto; background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 20px; padding: 4px 12px; font-size: 12px; color: var(--muted);
+    display: flex; align-items: center; gap: 6px;
+  }
+  header .progress-pill .bar {
+    width: 80px; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden;
+  }
+  header .progress-pill .bar .fill {
+    height: 100%; background: var(--accent2); border-radius: 3px;
+    transition: width 0.4s ease;
+  }
+
+  .body { display: flex; flex: 1; overflow: hidden; }
+
+  /* ── Sidebar ──────────────────────────────────────────────── */
+  #sidebar {
+    width: var(--sidebar-w); background: var(--bg2); border-right: 1px solid var(--border);
+    overflow-y: auto; flex-shrink: 0; padding: 12px 0;
+  }
+  #sidebar::-webkit-scrollbar { width: 4px; }
+  #sidebar::-webkit-scrollbar-track { background: transparent; }
+  #sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .phase-group { margin-bottom: 4px; }
+  .phase-header {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 16px; cursor: pointer; border-radius: 0;
+    transition: background 0.15s;
+    font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px;
+    user-select: none;
+  }
+  .phase-header:hover { background: var(--bg3); }
+  .phase-header.active { color: var(--text); }
+  .phase-header .phase-num {
+    width: 22px; height: 22px; border-radius: 50%;
+    background: var(--bg3); border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 700; flex-shrink: 0; color: var(--muted);
+  }
+  .phase-header.done .phase-num { background: var(--badge-done); border-color: var(--badge-done); color: #fff; }
+  .phase-header .chevron { margin-left: auto; transition: transform 0.2s; font-size: 10px; color: var(--muted); }
+  .phase-header.open .chevron { transform: rotate(90deg); }
+
+  .lesson-list { display: none; padding: 0 0 4px 0; }
+  .phase-group.open .lesson-list { display: block; }
+
+  .lesson-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 16px 6px 40px; cursor: pointer;
+    transition: background 0.15s; border-radius: 0;
+    font-size: 13px; color: var(--muted);
+  }
+  .lesson-item:hover { background: var(--bg3); color: var(--text); }
+  .lesson-item.active { background: var(--bg3); color: var(--accent); }
+  .lesson-item.done { color: var(--text); }
+  .lesson-item.done::before { content: "✓"; color: var(--accent2); font-size: 11px; margin-right: -2px; }
+  .lesson-item:not(.done):not(.active)::before { content: "○"; font-size: 11px; margin-right: -2px; color: var(--border); }
+  .lesson-item.active::before { content: "▶"; font-size: 9px; margin-right: -1px; }
+
+  /* ── Main pane ────────────────────────────────────────────── */
+  #main {
+    flex: 1; overflow-y: auto; padding: 0;
+    display: flex; flex-direction: column;
+  }
+  #main::-webkit-scrollbar { width: 6px; }
+  #main::-webkit-scrollbar-track { background: transparent; }
+  #main::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  .content-header {
+    padding: 24px 48px 16px; border-bottom: 1px solid var(--border);
+    background: var(--bg); position: sticky; top: 0; z-index: 50;
+    display: flex; align-items: flex-start; gap: 16px;
+  }
+  .content-header .breadcrumb { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  .content-header h1 { font-size: 20px; font-weight: 700; }
+  .content-header .badges { display: flex; gap: 8px; margin-top: 8px; }
+  .badge {
+    font-size: 11px; padding: 2px 8px; border-radius: 20px; font-weight: 600;
+  }
+  .badge.shipped { background: #0e3621; color: var(--accent2); border: 1px solid var(--accent2); }
+  .badge.sketch  { background: #1c2128; color: var(--muted);   border: 1px solid var(--border); }
+  .badge.phase0  { background: #2d1700; color: var(--warn);    border: 1px solid var(--warn); }
+
+  .content-actions { margin-left: auto; display: flex; gap: 8px; flex-shrink: 0; }
+  .btn {
+    padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;
+    border: 1px solid var(--border); background: var(--bg3); color: var(--text);
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .btn:hover { background: var(--bg2); border-color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #0d1117; }
+  .btn.primary:hover { opacity: 0.85; }
+  .btn.done-btn { background: var(--badge-done); border-color: var(--badge-done); color: #fff; }
+
+  .tab-bar {
+    display: flex; gap: 0; padding: 0 48px; background: var(--bg);
+    border-bottom: 1px solid var(--border);
+  }
+  .tab {
+    padding: 10px 16px; font-size: 13px; color: var(--muted); cursor: pointer;
+    border-bottom: 2px solid transparent; transition: color 0.15s, border-color 0.15s;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  .pane { padding: 32px 48px; display: none; }
+  .pane.active { display: block; }
+
+  /* ── Markdown styles ──────────────────────────────────────── */
+  .md-content h1 { font-size: 22px; font-weight: 700; margin: 24px 0 12px; }
+  .md-content h2 { font-size: 18px; font-weight: 600; margin: 28px 0 10px; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+  .md-content h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; color: var(--accent); }
+  .md-content h4 { font-size: 14px; font-weight: 600; margin: 16px 0 6px; color: var(--warn); }
+  .md-content p  { margin: 10px 0; color: var(--text); }
+  .md-content ul, .md-content ol { margin: 8px 0 8px 20px; }
+  .md-content li { margin: 4px 0; }
+  .md-content code {
+    background: var(--bg3); border: 1px solid var(--border); border-radius: 4px;
+    padding: 1px 5px; font-family: "SF Mono", "Fira Code", monospace; font-size: 12px;
+    color: #f0883e;
+  }
+  .md-content pre {
+    background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 16px; overflow-x: auto; margin: 12px 0;
+  }
+  .md-content pre code {
+    background: none; border: none; padding: 0; color: var(--text); font-size: 13px;
+  }
+  .md-content blockquote {
+    border-left: 3px solid var(--accent); padding: 8px 16px;
+    background: #0e1621; border-radius: 0 6px 6px 0; margin: 12px 0; color: var(--muted);
+  }
+  .md-content table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+  .md-content th {
+    background: var(--bg3); padding: 8px 12px; text-align: left;
+    border: 1px solid var(--border); font-size: 12px; color: var(--muted); font-weight: 600;
+  }
+  .md-content td { padding: 8px 12px; border: 1px solid var(--border); font-size: 13px; }
+  .md-content tr:nth-child(even) td { background: #0d1117; }
+  .md-content a { color: var(--accent); text-decoration: none; }
+  .md-content a:hover { text-decoration: underline; }
+  .md-content strong { color: var(--text); font-weight: 600; }
+  .md-content hr { border: none; border-top: 1px solid var(--border); margin: 24px 0; }
+
+  /* ── Code viewer ──────────────────────────────────────────── */
+  .code-viewer {
+    background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
+    overflow: hidden; margin-bottom: 16px;
+  }
+  .code-viewer .file-bar {
+    display: flex; align-items: center; padding: 8px 16px;
+    border-bottom: 1px solid var(--border); background: var(--bg3);
+    font-size: 12px; color: var(--muted);
+  }
+  .code-viewer .file-bar .filename { color: var(--text); font-family: monospace; }
+  .code-viewer pre { margin: 0; border: none; border-radius: 0; max-height: 60vh; }
+
+  /* ── Home screen ──────────────────────────────────────────── */
+  .home-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 12px; margin-top: 20px;
+  }
+  .phase-card {
+    background: var(--bg2); border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px; cursor: pointer; transition: border-color 0.15s, transform 0.15s;
+  }
+  .phase-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+  .phase-card .card-num { font-size: 11px; color: var(--muted); font-weight: 600; margin-bottom: 6px; }
+  .phase-card .card-title { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+  .phase-card .card-desc { font-size: 12px; color: var(--muted); line-height: 1.5; }
+  .phase-card .card-status { margin-top: 10px; }
+
+  /* ── Loading / error states ───────────────────────────────── */
+  .loading { padding: 48px; color: var(--muted); text-align: center; font-size: 13px; }
+  .loading::after { content: ""; animation: dots 1.2s infinite; }
+  @keyframes dots { 0%,20%{content:"."} 40%{content:".."} 60%,100%{content:"..."} }
+
+  .nav-footer {
+    display: flex; justify-content: space-between; margin-top: 40px;
+    padding-top: 20px; border-top: 1px solid var(--border);
+  }
+
+  /* ── Responsive ───────────────────────────────────────────── */
+  @media (max-width: 700px) {
+    #sidebar { display: none; }
+    .pane { padding: 20px; }
+    .content-header { padding: 16px 20px; }
+    .tab-bar { padding: 0 20px; }
+  }
+</style>
+</head>
+
+<body>
+<div id="app">
+  <header>
+    <div class="logo">Lex<span>Agent</span> <small class="sub">/ Themis</small></div>
+    <div class="progress-pill">
+      <span id="progress-text">0 / 12</span>
+      <div class="bar"><div class="fill" id="progress-bar" style="width:0%"></div></div>
+    </div>
+  </header>
+
+  <div class="body">
+    <nav id="sidebar"></nav>
+    <main id="main">
+      <div class="loading" id="loader">Loading course</div>
+    </main>
+  </div>
+</div>
+
+<script>
+// ── Course data ────────────────────────────────────────────────────────────
+const PHASES = [
+  {
+    num: 0, title: "Python Foundations", folder: "phase-00-python-foundations",
+    status: "done",
+    desc: "Types, async/await, TypedDict, Pydantic Settings",
+    lessons: [
+      { file: "README.md",                  title: "Overview",            type: "readme" },
+      { file: "01_python_basics.py",        title: "Python basics",       type: "code"   },
+      { file: "02_type_hints_typeddict.py", title: "Type hints & TypedDict", type: "code" },
+      { file: "03_async_await.py",          title: "async / await",       type: "code"   },
+      { file: "04_pydantic_settings.py",    title: "Pydantic Settings",   type: "code"   },
+      { file: "05_env_files.py",            title: ".env files",          type: "code"   },
+    ]
+  },
+  {
+    num: 1, title: "LangGraph Core", folder: "phase-01-langgraph-core",
+    status: "done",
+    desc: "StateGraph, nodes, edges, conditional routing",
+    lessons: [
+      { file: "README.md",               title: "Overview",              type: "readme" },
+      { file: "01_what_is_a_graph.py",   title: "What is a graph?",      type: "code"   },
+      { file: "02_your_first_graph.py",  title: "Your first graph",      type: "code"   },
+      { file: "03_nodes_contract.py",    title: "Node contract",         type: "code"   },
+      { file: "04_conditional_routing.py", title: "Conditional routing", type: "code"   },
+      { file: "05_human_in_the_loop.py", title: "Human-in-the-loop",    type: "code"   },
+      { file: "06_checkpointers.py",     title: "Checkpointers",        type: "code"   },
+    ]
+  },
+  {
+    num: 2, title: "Memory", folder: "phase-02-memory",
+    status: "done",
+    desc: "SOUL.md, SQLite, matter memory, session store",
+    lessons: [
+      { file: "README.md",            title: "Overview",          type: "readme" },
+      { file: "01_soul_md.py",        title: "SOUL.md",           type: "code"   },
+      { file: "02_matter_memory.py",  title: "Matter memory",     type: "code"   },
+      { file: "03_sqlite_fts5.py",    title: "SQLite FTS5",       type: "code"   },
+      { file: "04_session_store.py",  title: "Session store",     type: "code"   },
+    ]
+  },
+  {
+    num: 3, title: "Skills", folder: "phase-03-skills",
+    status: "done",
+    desc: "Markdown-as-config, YAML frontmatter, skill loader",
+    lessons: [
+      { file: "README.md",              title: "Overview",          type: "readme" },
+      { file: "01_what_is_a_skill.py",  title: "What is a skill?", type: "code"   },
+      { file: "02_yaml_frontmatter.py", title: "YAML frontmatter",  type: "code"   },
+      { file: "03_skill_loader.py",     title: "Skill loader",      type: "code"   },
+      { file: "04_prompt_injection.py", title: "Prompt injection",  type: "code"   },
+    ]
+  },
+  {
+    num: 4, title: "Tools & APIs", folder: "phase-04-tools-and-apis",
+    status: "done",
+    desc: "Tool registry, HTTP clients, Indian Kanoon, ReAct",
+    lessons: [
+      { file: "README.md",                  title: "Overview",             type: "readme" },
+      { file: "01_tool_registry.py",        title: "Tool registry",        type: "code"   },
+      { file: "02_http_clients.py",         title: "HTTP clients",         type: "code"   },
+      { file: "03_kanoon_tool.py",          title: "Kanoon tool",          type: "code"   },
+      { file: "04_limitation_calculator.py",title: "Limitation calculator",type: "code"   },
+      { file: "05_react_loop.py",           title: "ReAct loop",           type: "code"   },
+    ]
+  },
+  {
+    num: 5, title: "RAG & Retrieval", folder: "phase-05-rag-and-retrieval",
+    status: "done",
+    desc: "Chunking, BM25, TF-IDF, hybrid retrieval, cite node",
+    lessons: [
+      { file: "README.md",              title: "Overview",          type: "readme" },
+      { file: "01_why_rag.py",          title: "Why RAG?",          type: "code"   },
+      { file: "02_chunking.py",         title: "Chunking",          type: "code"   },
+      { file: "03_bm25.py",             title: "BM25",              type: "code"   },
+      { file: "04_tfidf_vectors.py",    title: "TF-IDF vectors",    type: "code"   },
+      { file: "05_hybrid_retrieval.py", title: "Hybrid retrieval",  type: "code"   },
+      { file: "06_cite_node.py",        title: "Cite node",         type: "code"   },
+    ]
+  },
+  {
+    num: 6, title: "Advanced RAG", folder: "phase-06-advanced-rag",
+    status: "done",
+    desc: "RAPTOR, GraphRAG, re-ranker, query expansion",
+    lessons: [
+      { file: "README.md",           title: "Overview",         type: "readme" },
+      { file: "01_raptor.py",        title: "RAPTOR",           type: "code"   },
+      { file: "02_graphrag.py",      title: "GraphRAG",         type: "code"   },
+      { file: "03_reranker.py",      title: "Re-ranker",        type: "code"   },
+      { file: "04_query_expansion.py", title: "Query expansion", type: "code"  },
+    ]
+  },
+  {
+    num: 7, title: "Gateways", folder: "phase-07-gateways",
+    status: "done",
+    desc: "Typer CLI, Telegram bot, inline buttons, streaming",
+    lessons: [
+      { file: "README.md",            title: "Overview",         type: "readme" },
+      { file: "01_typer_cli.py",      title: "Typer CLI",        type: "code"   },
+      { file: "02_telegram_bot.py",   title: "Telegram bot",     type: "code"   },
+      { file: "03_inline_buttons.py", title: "Inline buttons",   type: "code"   },
+      { file: "04_streaming.py",      title: "Streaming",        type: "code"   },
+    ]
+  },
+  {
+    num: 8, title: "UX & Output", folder: "phase-08-ux-and-output",
+    status: "done",
+    desc: "Rich, live spinners, python-docx, streaming tokens",
+    lessons: [
+      { file: "README.md",               title: "Overview",          type: "readme" },
+      { file: "01_rich_basics.py",       title: "Rich basics",       type: "code"   },
+      { file: "02_rich_live.py",         title: "Rich live panels",  type: "code"   },
+      { file: "03_streaming_llm.py",     title: "Streaming LLM",     type: "code"   },
+      { file: "04_docx_writer.py",       title: "DOCX writer",       type: "code"   },
+      { file: "05_loading_messages.py",  title: "Loading messages",  type: "code"   },
+    ]
+  },
+  {
+    num: 9, title: "Systems Design", folder: "phase-09-systems-design",
+    status: "done",
+    desc: "FastAPI, Postgres, Qdrant, multi-tenancy, Voice AI",
+    lessons: [
+      { file: "README.md",             title: "Overview",        type: "readme" },
+      { file: "01_fastapi_basics.py",  title: "FastAPI basics",  type: "code"   },
+      { file: "02_postgres_async.py",  title: "Postgres async",  type: "code"   },
+      { file: "03_qdrant_vectors.py",  title: "Qdrant vectors",  type: "code"   },
+      { file: "04_multi_tenancy.py",   title: "Multi-tenancy",   type: "code"   },
+      { file: "05_voice_gateway.py",   title: "Voice gateway",   type: "code"   },
+      { file: "06_security.py",        title: "Security",        type: "code"   },
+    ]
+  },
+  {
+    num: 10, title: "V3 Architecture", folder: "phase-10-v3-architecture",
+    status: "done",
+    desc: "Matter workspace, living agent, adversarial chamber, grid analysis",
+    lessons: [
+      { file: "README.md",                  title: "Overview",                type: "readme" },
+      { file: "01_matter_workspace.py",     title: "Matter workspace",        type: "code", badge: "sketch"  },
+      { file: "02_event_driven_runtime.py", title: "Event-driven runtime",    type: "code", badge: "sketch"  },
+      { file: "03_living_agent.py",         title: "24/7 living agent",       type: "code", badge: "sketch"  },
+      { file: "04_legal_chamber.py",        title: "Legal chamber subagents", type: "code", badge: "sketch"  },
+      { file: "05_dynamic_planner.py",      title: "Dynamic planner",         type: "code", badge: "sketch"  },
+      { file: "06_redline_docx.py",         title: "OOXML redlining",         type: "code", badge: "shipped" },
+      { file: "07_adversarial_chamber.py",  title: "Adversarial review",      type: "code", badge: "shipped" },
+      { file: "08_grid_analysis.py",        title: "Grid analysis",           type: "code", badge: "shipped" },
+    ]
+  },
+  {
+    num: 11, title: "Privacy & Safety", folder: "phase-11-privacy-and-safety",
+    status: "done",
+    desc: "Privacy tiers, PII anonymisation, runtime brakes",
+    lessons: [
+      { file: "README.md",                   title: "Overview",         type: "readme" },
+      { file: "01_privacy_tiers.py",         title: "Privacy tiers",    type: "code"   },
+      { file: "02_anonymization_gateway.py", title: "PII anonymisation",type: "code"   },
+      { file: "03_runtime_brakes.py",        title: "Runtime brakes",   type: "code"   },
+      { file: "04_playbook_dags.py",         title: "Playbook DAGs",    type: "code"   },
+    ]
+  },
+];
+
+// ── State ──────────────────────────────────────────────────────────────────
+const STORAGE_KEY = "lexagent-course-progress";
+let progress = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+let currentPhase = null;
+let currentLesson = null;
+
+function saveProgress() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(progress));
+}
+
+function markDone(phaseNum, lessonFile) {
+  if (!progress[phaseNum]) progress[phaseNum] = {};
+  progress[phaseNum][lessonFile] = true;
+  saveProgress();
+  updateProgressBar();
+  renderSidebar();
+}
+
+function isDone(phaseNum, lessonFile) {
+  return !!(progress[phaseNum] && progress[phaseNum][lessonFile]);
+}
+
+function countDone() {
+  let total = 0, done = 0;
+  PHASES.forEach(p => p.lessons.forEach(l => {
+    total++;
+    if (isDone(p.num, l.file)) done++;
+  }));
+  return { total, done };
+}
+
+function updateProgressBar() {
+  const { total, done } = countDone();
+  document.getElementById("progress-text").textContent = `${done} / ${total}`;
+  document.getElementById("progress-bar").style.width = `${(done / total * 100).toFixed(0)}%`;
+}
+
+// ── Sidebar ────────────────────────────────────────────────────────────────
+function renderSidebar() {
+  const sidebar = document.getElementById("sidebar");
+  sidebar.innerHTML = PHASES.map(phase => {
+    const isOpen = currentPhase === phase.num;
+    const allDone = phase.lessons.every(l => isDone(phase.num, l.file));
+    return `
+      <div class="phase-group ${isOpen ? "open" : ""}" data-phase="${phase.num}">
+        <div class="phase-header ${allDone ? "done" : ""} ${isOpen ? "open active" : ""}"
+             onclick="togglePhase(${phase.num})">
+          <div class="phase-num">${allDone ? "✓" : phase.num}</div>
+          <span>Phase ${phase.num}</span>
+          <span class="chevron">›</span>
+        </div>
+        <div class="lesson-list">
+          ${phase.lessons.map(l => `
+            <div class="lesson-item ${isDone(phase.num, l.file) ? "done" : ""}
+                        ${currentPhase === phase.num && currentLesson === l.file ? "active" : ""}"
+                 onclick="openLesson(${phase.num}, '${l.file}')">
+              ${l.title}
+            </div>
+          `).join("")}
+        </div>
+      </div>`;
+  }).join("");
+}
+
+function togglePhase(num) {
+  if (currentPhase === num) {
+    // just toggle open/close without navigating away
+    const group = document.querySelector(`.phase-group[data-phase="${num}"]`);
+    if (group) group.classList.toggle("open");
+  } else {
+    openLesson(num, "README.md");
+  }
+}
+
+// ── Content loading ────────────────────────────────────────────────────────
+async function fetchFile(path) {
+  const resp = await fetch(path);
+  if (!resp.ok) throw new Error(`${resp.status} ${resp.statusText}`);
+  return resp.text();
+}
+
+function buildPath(phase, lessonFile) {
+  return `${phase.folder}/${lessonFile}`;
+}
+
+async function openLesson(phaseNum, lessonFile) {
+  currentPhase = phaseNum;
+  currentLesson = lessonFile;
+
+  const phase = PHASES.find(p => p.num === phaseNum);
+  const lesson = phase.lessons.find(l => l.file === lessonFile);
+
+  renderSidebar();
+
+  const main = document.getElementById("main");
+  main.innerHTML = `<div class="loading">Loading ${lessonFile}</div>`;
+
+  let content;
+  try {
+    content = await fetchFile(buildPath(phase, lessonFile));
+  } catch (e) {
+    main.innerHTML = `
+      <div class="content-header">
+        <div>
+          <div class="breadcrumb">Phase ${phaseNum} — ${phase.title}</div>
+          <h1>${lesson.title}</h1>
+        </div>
+      </div>
+      <div class="pane active">
+        <p style="color:var(--warn)">⚠️ Could not load file: <code>${buildPath(phase, lessonFile)}</code></p>
+        <p style="color:var(--muted);margin-top:8px;">Make sure the server is running: <code>python serve.py</code></p>
+      </div>`;
+    return;
+  }
+
+  const badgeHtml = lesson.badge
+    ? `<span class="badge ${lesson.badge}">${lesson.badge === "shipped" ? "✅ Shipped" : "📐 Sketch"}</span>`
+    : "";
+  const doneHtml = isDone(phaseNum, lessonFile)
+    ? `<button class="btn done-btn" onclick="markDone(${phaseNum},'${lessonFile}')">✓ Done</button>`
+    : `<button class="btn primary" onclick="markDone(${phaseNum},'${lessonFile}')">Mark done</button>`;
+
+  const nextInfo = getNextLesson(phaseNum, lessonFile);
+  const nextBtn = nextInfo
+    ? `<button class="btn" onclick="openLesson(${nextInfo.phaseNum},'${nextInfo.file}')">Next: ${nextInfo.title} →</button>`
+    : "";
+
+  if (lesson.type === "readme") {
+    const rendered = marked.parse(content);
+    main.innerHTML = `
+      <div class="content-header">
+        <div>
+          <div class="breadcrumb">Phase ${phaseNum} — ${phase.title}</div>
+          <h1>${phase.title}</h1>
+          <div class="badges">${badgeHtml}</div>
+        </div>
+        <div class="content-actions">${doneHtml}</div>
+      </div>
+      <div class="pane active">
+        <div class="md-content">${rendered}</div>
+        <div class="nav-footer">${nextBtn}</div>
+      </div>`;
+  } else {
+    // Code file — show highlighted source
+    const escaped = content.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const highlighted = hljs.highlight(content, { language: "python" }).value;
+    main.innerHTML = `
+      <div class="content-header">
+        <div>
+          <div class="breadcrumb">Phase ${phaseNum} — ${phase.title}</div>
+          <h1>${lesson.title}</h1>
+          <div class="badges">${badgeHtml}</div>
+        </div>
+        <div class="content-actions">
+          <span style="font-size:11px;color:var(--muted);margin-right:4px;">${lessonFile}</span>
+          ${doneHtml}
+        </div>
+      </div>
+      <div class="tab-bar">
+        <div class="tab active" onclick="switchTab(this,'tab-code')">Code</div>
+        <div class="tab" onclick="switchTab(this,'tab-howto')">How to run</div>
+      </div>
+      <div class="pane active" id="tab-code">
+        <div class="code-viewer">
+          <div class="file-bar"><span class="filename">${phase.folder}/${lessonFile}</span></div>
+          <pre><code class="hljs language-python">${highlighted}</code></pre>
+        </div>
+        <div class="nav-footer">${nextBtn}</div>
+      </div>
+      <div class="pane" id="tab-howto">
+        <div class="md-content">
+          <h2>How to run this lesson</h2>
+          <pre><code>cd "/Users/anshoosareen/Lexagent/course/${phase.folder}"
+python ${lessonFile}</code></pre>
+          <h3>What to look for</h3>
+          <p>Read the output carefully — each section is numbered and explained inline.
+          The "Pause and think" boxes in the code are the most important part.
+          Stop at each one and answer the question before reading on.</p>
+          <h3>After running</h3>
+          <p>Open the corresponding file in <code>themis/</code> and find where this
+          pattern is used in production. The comment tags <code># LANGGRAPH:</code>
+          and <code># WHY:</code> mark the key design decisions.</p>
+        </div>
+        <div class="nav-footer">${nextBtn}</div>
+      </div>`;
+  }
+
+  // Scroll to top
+  main.scrollTop = 0;
+}
+
+function switchTab(tabEl, paneId) {
+  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+  document.querySelectorAll(".pane").forEach(p => p.classList.remove("active"));
+  tabEl.classList.add("active");
+  document.getElementById(paneId).classList.add("active");
+}
+
+function getNextLesson(phaseNum, lessonFile) {
+  const phase = PHASES.find(p => p.num === phaseNum);
+  const idx = phase.lessons.findIndex(l => l.file === lessonFile);
+  if (idx < phase.lessons.length - 1) {
+    return { phaseNum, file: phase.lessons[idx + 1].file, title: phase.lessons[idx + 1].title };
+  }
+  const nextPhase = PHASES.find(p => p.num === phaseNum + 1);
+  if (nextPhase) {
+    return { phaseNum: nextPhase.num, file: nextPhase.lessons[0].file, title: `Phase ${nextPhase.num}: ${nextPhase.title}` };
+  }
+  return null;
+}
+
+// ── Home screen ────────────────────────────────────────────────────────────
+function showHome() {
+  currentPhase = null;
+  currentLesson = null;
+  renderSidebar();
+
+  const main = document.getElementById("main");
+  const cards = PHASES.map(p => {
+    const allDone = p.lessons.every(l => isDone(p.num, l.file));
+    const doneCount = p.lessons.filter(l => isDone(p.num, l.file)).length;
+    const statusBadge = allDone
+      ? `<span class="badge shipped">✓ Complete</span>`
+      : doneCount > 0
+        ? `<span class="badge sketch">${doneCount}/${p.lessons.length} done</span>`
+        : `<span class="badge sketch">Not started</span>`;
+    return `
+      <div class="phase-card" onclick="openLesson(${p.num},'README.md')">
+        <div class="card-num">PHASE ${p.num}</div>
+        <div class="card-title">${p.title}</div>
+        <div class="card-desc">${p.desc}</div>
+        <div class="card-status">${statusBadge}</div>
+      </div>`;
+  }).join("");
+
+  main.innerHTML = `
+    <div class="content-header">
+      <div>
+        <div class="breadcrumb">LexAgent (Themis) Course</div>
+        <h1>Learn by Building</h1>
+      </div>
+    </div>
+    <div class="pane active">
+      <div class="md-content">
+        <p>Build LexAgent from scratch — phase by phase. By the end you will understand
+        every line, fix any bug, and extend with new features.</p>
+        <p style="margin-top:6px;color:var(--muted);">
+          Click a phase card to start. Each phase has a README overview and runnable
+          Python lesson files. Mark lessons done to track your progress.
+        </p>
+      </div>
+      <div class="home-grid">${cards}</div>
+    </div>`;
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────
+document.getElementById("loader").remove();
+updateProgressBar();
+showHome();
+</script>
+</body>
+</html>

@@ -25,7 +25,7 @@ from themis.skills.loader import (
     load_skill_stack,
     route_skills,
 )
-from themis.state import LexState
+from themis.state import SeniorCounselState
 
 # WHY: Module-level constant so tests can patch it to a tmp_path with fixture skills
 # without patching the entire config object.
@@ -34,7 +34,7 @@ BUNDLED_SKILLS_DIR = Path(__file__).parent.parent / "skills"
 _stderr_console = Console(stderr=True)
 
 
-async def run(state: LexState) -> dict:
+async def run(state: SeniorCounselState) -> dict:
     """
     Select and load the best skill stack for this matter.
     Always succeeds — falls back to empty skill (base prompt only) on any failure.

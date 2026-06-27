@@ -12,7 +12,7 @@ from typing import Optional
 import litellm
 
 from themis.config import LexConfig
-from themis.state import LexState
+from themis.state import SeniorCounselState
 
 
 # ---------------------------------------------------------------------------
@@ -155,7 +155,7 @@ def _load_prompt(filename: str) -> str:
     return prompt_path.read_text(encoding="utf-8")
 
 
-def _build_string_system_prompt(state: LexState, base_prompt: str, wisdom_text: Optional[str] = None) -> str:
+def _build_string_system_prompt(state: SeniorCounselState, base_prompt: str, wisdom_text: Optional[str] = None) -> str:
     """
     Build the string-form system prompt for non-Anthropic providers.
     Injects SOUL.md and active skill into the base template placeholders.
@@ -189,7 +189,7 @@ def _build_string_system_prompt(state: LexState, base_prompt: str, wisdom_text: 
     )
 
 
-def _build_draft_instruction(state: LexState) -> str:
+def _build_draft_instruction(state: SeniorCounselState) -> str:
     """Build the user-turn drafting instruction, personalised with lawyer name and agent."""
     lawyer_soul = state.get("lawyer_soul")
     lawyer_name = ""
@@ -325,7 +325,7 @@ def _build_draft_instruction(state: LexState) -> str:
 # ---------------------------------------------------------------------------
 
 
-async def run(state: LexState) -> dict:
+async def run(state: SeniorCounselState) -> dict:
     """
     Draft node: produces a full legal document from the intake fields.
 
@@ -456,7 +456,7 @@ def _is_s138_matter(matter_type: str) -> bool:
     return "138" in mt or "s138" in mt or "cheque" in mt or "ni act" in mt or "dishonour" in mt
 
 
-async def _generate_affidavit(state: LexState, config: "LexConfig", complaint_draft: str) -> str:
+async def _generate_affidavit(state: SeniorCounselState, config: "LexConfig", complaint_draft: str) -> str:
     """
     Generate an Evidence by Affidavit for S.138 NI Act complaints.
 

@@ -17,7 +17,7 @@ from types import SimpleNamespace
 from typing import Any
 
 from themis.config import LexConfig
-from themis.state import LexState
+from themis.state import SeniorCounselState
 
 
 class _LLMWrapper:
@@ -59,7 +59,7 @@ def _load_prompt(name: str, **kwargs) -> str:
     return p.read_text().format(**kwargs)
 
 
-async def run(state: LexState) -> dict:
+async def run(state: SeniorCounselState) -> dict:
     # Early exit: chamber is opt-in. When disabled, this node is a transparent pass-through.
     if not state.get("chamber_enabled"):
         return {}

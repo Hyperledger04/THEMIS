@@ -26,7 +26,7 @@ from themis.config import LexConfig
 from themis.graph import get_graph, setup_checkpointer
 from themis.security.context import SecurityContext, Role
 from themis.security.audit import AuditAction, log_action
-from themis.state import LexState
+from themis.state import SeniorCounselState
 
 logger = logging.getLogger(__name__)
 
@@ -202,7 +202,7 @@ async def send_message(
     snapshot = await graph.aget_state(langgraph_cfg)
     is_new = not snapshot or not snapshot.values
 
-    state: LexState = {
+    state: SeniorCounselState = {
         "user_input": body.text,
         "matter_id": matter_id,
         "messages": [{"role": "user", "content": body.text}],
@@ -410,7 +410,7 @@ async def ws_endpoint(
         snapshot = await graph.aget_state(langgraph_cfg)
         is_new = not snapshot or not snapshot.values
 
-        state: LexState = {
+        state: SeniorCounselState = {
             "user_input": user_text,
             "matter_id": matter_id,
             "messages": [{"role": "user", "content": user_text}],

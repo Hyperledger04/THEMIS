@@ -1,19 +1,18 @@
 # LANGGRAPH: A StateGraph is the core concept in LangGraph.
 # It is a directed graph where:
-#   - Nodes are Python functions (sync or async) that receive LexState and return a partial dict
+#   - Nodes are Python functions (sync or async) that receive SeniorCounselState and return a partial dict
 #   - Edges define the flow between nodes
 #   - Conditional edges let the graph make routing decisions based on state values
 #
-# The graph is compiled once at startup and then invoked for each matter.
-# Compilation validates the graph structure and returns a runnable object.
+# V3.3: build_graph() now delegates to build_senior_counsel_graph() from
+# themis/agents/senior_counsel.py. The external API (get_graph, setup_checkpointer,
+# invalidate_graph_cache) is unchanged — callers are unaffected.
 
 import logging
 
-from langgraph.graph import END, StateGraph
+from langgraph.graph import StateGraph
 
 from themis.config import LexConfig
-from themis.nodes import chamber, cite, draft, intake, react_research, retrieve, review
-from themis.state import LexState
 
 logger = logging.getLogger(__name__)
 
@@ -24,15 +23,6 @@ logger = logging.getLogger(__name__)
 # Phase 9: _GRAPH is now a dict keyed by checkpointer type so we can hold both
 # the Postgres-backed graph (production) and the in-memory graph (stub/tests)
 # without rebuilding unnecessarily.
-# Matter types that never benefit from case-law research.
-# For these, intake routes directly to draft, skipping the research node entirely.
-_NO_RESEARCH_TYPES = (
-    "legal notice",
-    "demand notice",
-    "affidavit",
-    "vakalatnama",
-)
-
 _GRAPHS: dict = {}
 
 
@@ -127,104 +117,7 @@ def invalidate_graph_cache() -> None:
 
 
 # -----------------------------------------------------------------------
-# Routing functions — these are the "decision points" in the graph.
-# LANGGRAPH: A conditional edge calls a routing function and routes to
-# the node whose name matches the returned string.
-# -----------------------------------------------------------------------
-
-
-def _make_routes(cfg: LexConfig):
-    """
-    Return routing closures that capture a single LexConfig instance.
-    WHY: Instantiating LexConfig() inside each routing call reads .env on
-    every edge evaluation. Under concurrent Telegram users this adds unnecessary
-    overhead. We capture cfg once at build_graph() time instead.
-    """
-
-    def route_after_intake(state: LexState) -> str:
-        """
-        After intake runs, decide what to do next:
-        - If the lawyer hasn't answered all questions yet → loop back to intake
-        - If workflow_mode is contract_review → skip research, go straight to contract_review
-        - If all required fields are collected → move to research
-        - If there was an error → end the graph
-        """
-        if state.get("error"):
-            return END
-
-        # LANGGRAPH: Returning a string here tells the graph which node to go to next.
-        # This is how you implement loops — intake can route back to itself until done.
-        if state.get("intake_complete"):
-            # Phase 7: contract review branch bypasses the research → draft pipeline.
-            if state.get("workflow_mode") == "contract_review":
-                return "contract_review"
-            # Skip research for document types that don't need case law,
-            # but still run retrieve so they get template grounding.
-            mt = (state.get("matter_type") or "").lower()
-            if any(t in mt for t in _NO_RESEARCH_TYPES):
-                return "retrieve"
-            return "research"
-        # WHY: return END (not "intake") so the graph yields back to the CLI after
-        # each incomplete intake round. The CLI's while-loop re-invokes the graph
-        # with the user's answers appended — this is the human-in-the-loop pattern.
-        # Looping back to "intake" internally means the LLM runs multiple times
-        # with no new user input, producing an infinite spinner with no questions shown.
-        return END
-
-    def route_after_research(state: LexState) -> str:
-        """
-        After research runs:
-        - research_only=True → stop here (CLI renders a findings table, no draft)
-        - otherwise → retrieve (template grounding before draft)
-        """
-        if state.get("error"):
-            return END
-        if state.get("research_only"):
-            return END
-        return "retrieve"
-
-    def _cite_or_review(state: LexState) -> str:
-        """
-        Shared logic for choosing between cite and review.
-        WHY extracted: both route_after_draft (chamber disabled) and
-        route_after_chamber (chamber enabled) need the same cite-or-review decision.
-        """
-        if cfg.auto_verify_citations and state.get("research_findings"):
-            return "cite"
-        return "review"
-
-    def route_after_draft(state: LexState) -> str:
-        """
-        After draft runs:
-        - If chamber_enabled: hand off to the adversarial review chamber first.
-        - Phase 5: Route to cite (which feeds review) when research findings exist.
-        - If no findings, skip cite and go directly to review for validation + .docx.
-        """
-        if state.get("error"):
-            return END
-
-        # WHY: chamber sits between draft and the final cite/review pipeline.
-        # When enabled, the draft goes through three adversarial LLM passes before
-        # the standard citation-verification and review steps run.
-        if state.get("chamber_enabled"):
-            return "chamber"
-
-        return _cite_or_review(state)
-
-    def route_after_chamber(state: LexState) -> str:
-        """
-        After the chamber node runs, apply the same cite-or-review routing
-        that route_after_draft would have used if chamber were disabled.
-        """
-        if state.get("error"):
-            return END
-        return _cite_or_review(state)
-
-    return route_after_intake, route_after_research, route_after_draft, route_after_chamber
-
-
-# -----------------------------------------------------------------------
-# Graph assembly
+# Graph assembly (V3.3 — delegates to Senior Counsel subgraph)
 # -----------------------------------------------------------------------
 
 
@@ -232,64 +125,14 @@ def build_graph() -> StateGraph:
     """
     Assemble the LangGraph StateGraph (without checkpointer).
 
-    LANGGRAPH: StateGraph(LexState) creates a graph typed to our state.
-    Every node in this graph must accept LexState and return a partial dict.
+    V3.3: Delegates to build_senior_counsel_graph() from themis/agents/senior_counsel.py.
+    The Senior Counsel subgraph coordinates specialist agents (researcher, drafter,
+    reviewer, verification) via send() dispatch with an execution_plan queue.
 
-    Returns an uncompiled StateGraph. Call get_graph() to get the compiled,
-    checkpointer-equipped runnable. Direct compile() calls are for tests only.
-
-    Phase 9: Checkpointer is injected at compile time by get_graph() /
-    _build_with_checkpointer() so the same graph definition works with both
-    Postgres (production) and MemorySaver (tests/CLI).
+    External callers (get_graph, CLI, gateways) are unchanged — only the internals changed.
+    Returns an uncompiled StateGraph; get_graph() injects the checkpointer.
     """
-    cfg = LexConfig()
-    route_after_intake, route_after_research, route_after_draft, route_after_chamber = _make_routes(cfg)
-
-    # LANGGRAPH: StateGraph(LexState) tells LangGraph the shape of the state.
-    # It uses this to validate that nodes return keys that exist in LexState.
-    graph = StateGraph(LexState)
-
-    # Import Phase 7 nodes here to avoid circular imports at module load time.
-    from themis.nodes import contract_review
-
-    # LANGGRAPH: add_node(name, function) registers a function as a named node.
-    # The name is what routing functions return to navigate to this node.
-    graph.add_node("intake", intake.run)
-    graph.add_node("research", react_research.run)
-    graph.add_node("retrieve", retrieve.run)
-    graph.add_node("draft", draft.run)
-    graph.add_node("chamber", chamber.run)
-    graph.add_node("cite", cite.run)
-    graph.add_node("review", review.run)
-    graph.add_node("contract_review", contract_review.run)
-
-    # LANGGRAPH: set_entry_point(name) defines where the graph starts.
-    # Every graph.invoke() call begins at this node.
-    graph.set_entry_point("intake")
-
-    # LANGGRAPH: add_conditional_edges(source, routing_fn) calls routing_fn
-    # after "source" runs and routes to whatever string it returns.
-    # The routing function receives the full state and returns a node name or END.
-    graph.add_conditional_edges("intake", route_after_intake)
-
-    # LANGGRAPH: add_conditional_edges on draft too — handles cite-or-review routing.
-    # When chamber_enabled, draft routes to chamber first; chamber then routes to cite or review.
-    graph.add_conditional_edges("draft", route_after_draft)
-    graph.add_conditional_edges("chamber", route_after_chamber)
-
-    # research → draft normally; research_only=True → END
-    graph.add_conditional_edges("research", route_after_research)
-
-    # retrieve always flows to draft — it's a pure context-enrichment step
-    graph.add_edge("retrieve", "draft")
-
-    # cite feeds into review; review is the terminal node in Phase 5
-    # LANGGRAPH: first time chaining cite→review — review validates grounding
-    # and writes the .docx if --output was requested.
-    graph.add_edge("cite", "review")
-    graph.add_edge("review", END)
-
-    # Phase 7: contract_review is a terminal branch — goes straight to END.
-    graph.add_edge("contract_review", END)
-
-    return graph
+    # WHY lazy import: avoids circular imports at module load time.
+    # senior_counsel imports from themis.nodes; keeping it lazy breaks any cycle.
+    from themis.agents.senior_counsel import build_senior_counsel_graph
+    return build_senior_counsel_graph()

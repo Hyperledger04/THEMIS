@@ -21,7 +21,7 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING  # type: ignore[i
 from docx.shared import Inches, Mm, Pt  # type: ignore[import]
 
 from themis.courts import CourtDraftSpec, load_spec
-from themis.state import LexState
+from themis.state import SeniorCounselState
 
 # ---------------------------------------------------------------------------
 # Party label map — keyed by matter_type value from LexState.
@@ -212,7 +212,7 @@ def _write_lawyer_notes_docx(notes_text: str, notes_path: str) -> str:
 # Main public function
 # ---------------------------------------------------------------------------
 
-def write_docx(state: LexState, output_path: str) -> str:
+def write_docx(state: SeniorCounselState, output_path: str) -> str:
     """
     Write state["draft_output"] to a court-ready .docx file.
 
@@ -342,7 +342,7 @@ def write_docx(state: LexState, output_path: str) -> str:
 # Affidavit sub-document writer
 # ---------------------------------------------------------------------------
 
-def write_affidavit_docx(state: LexState, output_path: str) -> str:
+def write_affidavit_docx(state: SeniorCounselState, output_path: str) -> str:
     """
     Write state["affidavit_output"] to a standalone affidavit_evidence.docx.
 

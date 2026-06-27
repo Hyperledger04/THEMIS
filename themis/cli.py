@@ -21,7 +21,7 @@ from rich import print as rprint
 
 from themis.config import LexConfig
 from themis.graph import get_graph
-from themis.state import LexState
+from themis.state import SeniorCounselState
 from themis.ui.spinner import LexAnimator
 
 
@@ -359,7 +359,7 @@ async def _run_draft(
     graph = get_graph()
 
     if prior_state:
-        state: LexState = {**prior_state}  # type: ignore[assignment]
+        state: SeniorCounselState = {**prior_state}  # type: ignore[assignment]
         state["user_input"] = initial_brief
         state["intake_complete"] = False
         state["draft_output"] = None
@@ -541,7 +541,7 @@ def _blank_state(
     forced_skill_names: Optional[List[str]] = None,
     redline_source_path: Optional[str] = None,
     chamber_enabled: bool = False,
-) -> LexState:
+) -> SeniorCounselState:
     return {  # type: ignore[return-value]
         "user_input": brief,
         "matter_id": matter_id,
@@ -580,7 +580,7 @@ def _blank_state(
     }
 
 
-def _save_session_and_memory(state: LexState, cfg: LexConfig) -> None:
+def _save_session_and_memory(state: SeniorCounselState, cfg: LexConfig) -> None:
     from themis.memory.matter_memory import save_matter_memory
     from themis.memory.session_store import init_db, save_session
 
@@ -601,7 +601,7 @@ def _save_session_and_memory(state: LexState, cfg: LexConfig) -> None:
         console.print(f"\n[dim yellow]Note: Could not save session — {e}[/dim yellow]")
 
 
-def _render_draft(state: LexState) -> None:
+def _render_draft(state: SeniorCounselState) -> None:
     agent = state.get("active_agent")
     agent_label = ""
     if agent:

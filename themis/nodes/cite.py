@@ -13,7 +13,7 @@ import re
 from rich.console import Console
 
 from themis.config import LexConfig
-from themis.state import LexState
+from themis.state import SeniorCounselState
 
 console = Console()
 
@@ -70,7 +70,7 @@ def _verify_citations(
     return verified, unverified
 
 
-async def run(state: LexState) -> dict:
+async def run(state: SeniorCounselState) -> dict:
     try:
         draft = state.get("draft_output") or ""
         findings = state.get("research_findings") or []

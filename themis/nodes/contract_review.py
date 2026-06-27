@@ -16,10 +16,10 @@ import litellm
 from rich.console import Console
 
 from themis.config import LexConfig
-from themis.state import LexState
+from themis.state import SeniorCounselState
 
 
-def _enqueue_playbook_job(cfg: LexConfig, state: LexState, document_path: str) -> None:
+def _enqueue_playbook_job(cfg: LexConfig, state: SeniorCounselState, document_path: str) -> None:
     """
     Enqueue an async playbook_review AgentJob for the active playbook.
     Called when cfg.playbook_execution_enabled=True and a playbook_id is set.
@@ -141,7 +141,7 @@ def _build_risk_analysis(report_text: str) -> dict:
     }
 
 
-async def run(state: LexState) -> dict:
+async def run(state: SeniorCounselState) -> dict:
     """
     Contract review node.
     Reads a PDF, sends it to the LLM with the contract review system prompt,

@@ -20,7 +20,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Generator, List, Optional
 
-from themis.state import LexState
+from themis.state import SeniorCounselState
 
 _logger = logging.getLogger(__name__)
 
@@ -212,7 +212,7 @@ def init_db(sessions_db: str = "~/.themis/sessions.db") -> None:
 
 
 def save_session(
-    state: LexState,
+    state: SeniorCounselState,
     sessions_db: str = "~/.themis/sessions.db",
     firm_id: str = "default",
     user_id: str = "default",
@@ -352,7 +352,7 @@ def get_session_state(
 
 
 def update_session(
-    state: LexState,
+    state: SeniorCounselState,
     sessions_db: str = "~/.themis/sessions.db",
     firm_id: str = "default",
     user_id: str = "default",

@@ -1,7 +1,8 @@
-# Phase 10 — V3 Architecture: LexAgent as a Persistent Legal OS
+# Phase 10 — V3 Architecture: LexAgent (Themis) as a Persistent Legal OS
 
-> **This phase is architectural — code sketches that show patterns, not production code.**
-> See `LEXAGENT_OS_V3_ARCHITECTURE_ROADMAP.md` in the repo root for the full plan.
+> **This phase combines architectural code sketches with three features already shipped to the codebase.**
+> Full V3 plan: `LEXAGENT_OS_V3_ARCHITECTURE_ROADMAP.md` in the repo root.
+> Package rename note: all source is now `themis/` (CLI is still `lex`, data dir is `~/.themis/`).
 
 ---
 
@@ -101,10 +102,95 @@ No LangGraph, no LangChain, no external services. Only `pydantic`, `asyncio`, an
 
 ---
 
+---
+
+## Part 2 — doc-haus Bridge Features (already shipped)
+
+Three patterns from the open-source [doc-haus](https://github.com/sure-scale/doc-haus) TypeScript legal AI were ported to this Python stack. They ship **before** the full V3 planner and subagent contracts because they are independent of that infrastructure.
+
+> These are not sketches. The code is live in `themis/`.
+
+### `06_redline_docx.py` — OOXML Tracked-Changes Redlining
+
+**The gap:** `docx_writer.py` only writes clean files. There is no way to show what changed between contract versions.
+
+**The fix:** `themis/tools/redline.py` diffs original `.docx` paragraphs against revised text using `difflib`, then injects `<w:del>` / `<w:ins>` OOXML elements directly via `lxml`. Word opens the file showing tracked changes natively — no external redline service needed.
+
+**CLI:** `lex draft "revise NDA" --redline /tmp/original.docx --output /tmp/revised.docx`
+
+**Why now:** The V3 roadmap initially deferred this "until draft versioning is stable." doc-haus shows the implementation is independent of versioning. OOXML injection is purely a tool concern.
+
+### `07_adversarial_chamber.py` — Adversarial Multi-Agent Review
+
+**The gap:** `themis/nodes/review.py` is a single-pass LLM call. One model checking its own output does not catch subtle legal errors.
+
+**The fix:** `themis/nodes/chamber.py` runs three sequential LLM calls:
+1. **Reviewer** — finds numbered issues in the draft
+2. **Challenger** — marks each issue VALID / OVERSTATED / WRONG
+3. **Summarizer** — synthesises both into ACTION ITEMs + RISK LEVEL
+
+**CLI:** `lex draft "review vendor agreement" --chamber`
+
+**Why sequential, not parallel:** the Challenger must see the Reviewer's output; the Summarizer must see both. This is the same topological constraint as any DAG dependency — lesson 5 (`05_dynamic_planner.py`) makes this precise.
+
+**V3 future:** Phase 11 replaces this single node with ten isolated specialist subagents (Senior, Research, Statutory, Procedure, Evidence, Drafting, Citation, Risk, Client, Planner Counsel). The interface (`chamber_review` in state) stays the same.
+
+### `08_grid_analysis.py` — Cross-Document Grid Analysis
+
+**The gap:** `document_qa` can answer one question about one document. Due diligence on 50 contracts requires the same question answered across every document simultaneously.
+
+**The fix:** `themis/nodes/grid.py` runs `asyncio.gather` over every `(question, doc)` pair in the matter, producing a `{question: {doc_name: answer}}` matrix rendered as a Rich table.
+
+**CLI:** `lex grid my-matter -q "What is the notice period?" -q "Who bears indemnity?" --csv output.csv`
+
+**Why `asyncio.gather` here:** each LLM call is independent (no shared mutable state). Parallel is O(max single call) instead of O(questions × docs). This is the key insight from Phase 0 async/await — concurrency without threading.
+
+**V3 future:** Phase 4 (Bulk Document Intelligence) replaces `_list_matter_docs()` with a `workspace.repository.list_documents(matter_id)` call. The node interface is unchanged.
+
+---
+
+## Lessons in this phase
+
+| File | Topic | Status |
+|------|-------|--------|
+| `01_matter_workspace.py` | Canonical matter model (Pydantic) | Sketch |
+| `02_event_driven_runtime.py` | Event bus + domain events | Sketch |
+| `03_living_agent.py` | 24/7 background worker | Sketch |
+| `04_legal_chamber.py` | Specialist subagents | Sketch |
+| `05_dynamic_planner.py` | Planner-generated DAGs | Sketch |
+| `06_redline_docx.py` | OOXML tracked-changes redlining | **Shipped** (`themis/tools/redline.py`) |
+| `07_adversarial_chamber.py` | Adversarial review chamber | **Shipped** (`themis/nodes/chamber.py`) |
+| `08_grid_analysis.py` | Cross-document grid analysis | **Shipped** (`themis/nodes/grid.py`) |
+
+---
+
+## How to run
+
+```bash
+# Architecture sketches — no external deps
+pip install pydantic
+python 01_matter_workspace.py
+python 02_event_driven_runtime.py
+python 03_living_agent.py
+python 04_legal_chamber.py
+python 05_dynamic_planner.py
+
+# doc-haus bridge features — requires themis installed
+cd /Users/anshoosareen/Lexagent && uv sync
+python course/phase-10-v3-architecture/06_redline_docx.py
+python course/phase-10-v3-architecture/07_adversarial_chamber.py
+python course/phase-10-v3-architecture/08_grid_analysis.py
+```
+
+---
+
 ## Reference
 
 - Full V3 plan: `LEXAGENT_OS_V3_ARCHITECTURE_ROADMAP.md` (repo root)
-- Current graph: `lexagent/graph.py`
-- Current state: `lexagent/state.py`
-- Current config: `lexagent/config.py`
-- Runtime stubs: `lexagent/runtime/`
+- Current graph: `themis/graph.py`
+- Current state: `themis/state.py`
+- Current config: `themis/config.py`
+- Runtime: `themis/runtime/`
+- Redline tool: `themis/tools/redline.py`
+- Chamber node: `themis/nodes/chamber.py`
+- Grid node: `themis/nodes/grid.py`

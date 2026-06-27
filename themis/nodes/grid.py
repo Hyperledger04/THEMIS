@@ -16,7 +16,7 @@ import asyncio
 from pathlib import Path
 
 from themis.config import LexConfig
-from themis.state import LexState
+from themis.state import SeniorCounselState
 
 
 def _list_matter_docs(matter_id: str) -> list[str]:
@@ -30,12 +30,12 @@ def _list_matter_docs(matter_id: str) -> list[str]:
     ]
 
 
-async def _run_qa(question: str, doc_path: str, state: LexState) -> dict:
+async def _run_qa(question: str, doc_path: str, state: SeniorCounselState) -> dict:
     from themis.nodes.document_qa import run as qa_run
     return await qa_run({**state, "qa_question": question, "qa_document_path": doc_path})
 
 
-async def run(state: LexState) -> dict:
+async def run(state: SeniorCounselState) -> dict:
     questions: list[str] = state.get("grid_questions") or []
     if not questions:
         return {}
