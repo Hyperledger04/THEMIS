@@ -479,32 +479,61 @@ def list_reminders(
     matter_id: Optional[str] = None,
     include_fired: bool = False,
     sessions_db: str = "~/.themis/sessions.db",
+    telegram_user_id: Optional[str] = None,
 ) -> List[dict]:
-    """List reminders, optionally filtered by matter_id and fired status."""
+    """
+    List reminders, optionally filtered by matter_id, fired status, and Telegram user.
+
+    WHY telegram_user_id filter: in multi-user Telegram deployments a single SQLite
+    file is shared across users. Without scoping, user A's reminder queries would
+    return user B's rows. V3.4 interim fix — domain events replace this in V3.5.
+    """
     init_db(sessions_db)
 
     with _connect(sessions_db) as conn:
+        clauses: list[str] = []
+        params: list = []
+
         if matter_id:
-            query = "SELECT * FROM reminders WHERE matter_id = ?"
-            params: tuple = (matter_id,)
-            if not include_fired:
-                query += " AND fired = 0"
-        else:
-            query = "SELECT * FROM reminders"
-            params = ()
-            if not include_fired:
-                query += " WHERE fired = 0"
+            clauses.append("matter_id = ?")
+            params.append(matter_id)
+        if telegram_user_id is not None:
+            clauses.append("telegram_user_id = ?")
+            params.append(telegram_user_id)
+        if not include_fired:
+            clauses.append("fired = 0")
+
+        query = "SELECT * FROM reminders"
+        if clauses:
+            query += " WHERE " + " AND ".join(clauses)
         query += " ORDER BY fire_at ASC"
+
         rows = conn.execute(query, params).fetchall()
         return [dict(row) for row in rows]
 
 
-def delete_reminder(reminder_id: int, sessions_db: str = "~/.themis/sessions.db") -> bool:
-    """Delete a reminder by ID. Returns True if a row was deleted."""
+def delete_reminder(
+    reminder_id: int,
+    sessions_db: str = "~/.themis/sessions.db",
+    telegram_user_id: Optional[str] = None,
+) -> bool:
+    """
+    Delete a reminder by ID. Returns True if a row was deleted.
+
+    WHY telegram_user_id: scoping the DELETE prevents one Telegram user from
+    deleting another user's reminder by guessing a reminder_id integer.
+    When None (CLI / non-Telegram callers), no user scope is applied.
+    """
     init_db(sessions_db)
 
     with _connect(sessions_db) as conn:
-        cursor = conn.execute("DELETE FROM reminders WHERE id = ?", (reminder_id,))
+        if telegram_user_id is not None:
+            cursor = conn.execute(
+                "DELETE FROM reminders WHERE id = ? AND telegram_user_id = ?",
+                (reminder_id, telegram_user_id),
+            )
+        else:
+            cursor = conn.execute("DELETE FROM reminders WHERE id = ?", (reminder_id,))
         return cursor.rowcount > 0
 
 
@@ -560,16 +589,32 @@ def load_chat_history(
         return [{"role": row["role"], "content": row["content"]} for row in rows]
 
 
-def get_due_reminders(sessions_db: str = "~/.themis/sessions.db") -> List[dict]:
-    """Return all unfired reminders whose fire_at time has passed."""
+def get_due_reminders(
+    sessions_db: str = "~/.themis/sessions.db",
+    telegram_user_id: Optional[str] = None,
+) -> List[dict]:
+    """
+    Return all unfired reminders whose fire_at time has passed.
+
+    WHY telegram_user_id: the scheduler calls this without a user filter (it
+    sees all due reminders and routes each to the correct user via the
+    telegram_user_id field in the row). Pass a user ID to scope to one user,
+    e.g. when a user polls for their own due reminders via the gateway.
+    """
     init_db(sessions_db)
 
     now = datetime.now().isoformat()
     with _connect(sessions_db) as conn:
-        rows = conn.execute(
-            "SELECT * FROM reminders WHERE fired = 0 AND fire_at <= ? ORDER BY fire_at ASC",
-            (now,),
-        ).fetchall()
+        if telegram_user_id is not None:
+            rows = conn.execute(
+                "SELECT * FROM reminders WHERE fired = 0 AND fire_at <= ? AND telegram_user_id = ? ORDER BY fire_at ASC",
+                (now, telegram_user_id),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM reminders WHERE fired = 0 AND fire_at <= ? ORDER BY fire_at ASC",
+                (now,),
+            ).fetchall()
         return [dict(row) for row in rows]
 
 

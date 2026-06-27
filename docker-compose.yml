@@ -1,17 +1,32 @@
 version: "3.9"
 
-# Themis infrastructure stack.
+# Themis infrastructure stack — V3.4: adds Redis (ARQ queue) + lexagent-worker
+# (living agent) + mcp-lex-debate (debate board MCP server).
+#
 # WHY two-file env strategy: .env.docker is committed (safe defaults only).
 # Secrets (API keys, JWT secret, encryption key) go in .env.local which is
 # gitignored. The control plane picks both up via pydantic-settings.
 
 services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   qdrant:
     image: qdrant/qdrant:v1.9.7
     restart: unless-stopped
     ports:
-      - "6333:6333"   # REST + gRPC
-      - "6334:6334"   # gRPC
+      - "6333:6333"
+      - "6334:6334"
     volumes:
       - qdrant_data:/qdrant/storage
     environment:
@@ -52,15 +67,61 @@ services:
     environment:
       DATABASE_URL: postgresql://themis:${POSTGRES_PASSWORD:-themis_dev}@postgres:5432/themis
       QDRANT_URL: http://qdrant:6333
+      REDIS_URL: redis://redis:6379
     depends_on:
       postgres:
         condition: service_healthy
       qdrant:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     volumes:
       - themis_home:/root/.themis
 
+  # V3.4: Living agent worker — runs the Senior Counsel graph for paused matters.
+  # WHY separate service: long-running graph executions (research + draft) must
+  # not block the control plane HTTP event loop. Worker consumes from the Redis
+  # ARQ queue; persist_matter_step() writes results back to Postgres.
+  lexagent-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: python -m themis.worker.main
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://themis:${POSTGRES_PASSWORD:-themis_dev}@postgres:5432/themis
+      QDRANT_URL: http://qdrant:6333
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - themis_home:/root/.themis
+
+  # V3.4: Debate board MCP server — in-memory store in V3.4, Postgres-backed in V3.5.
+  # WHY sidecar: shared finding state across all specialist agents; survives
+  # individual worker restarts and can be swapped for a DB-backed impl with zero
+  # downtime by changing only the command here.
+  mcp-lex-debate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: python -m themis.mcp.debate_server
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://themis:${POSTGRES_PASSWORD:-themis_dev}@postgres:5432/themis
+    depends_on:
+      postgres:
+        condition: service_healthy
+
 volumes:
+  redis_data:
   qdrant_data:
   postgres_data:
   themis_home:

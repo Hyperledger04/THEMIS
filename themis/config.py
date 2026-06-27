@@ -216,6 +216,9 @@ class LexConfig(BaseSettings):
     # Whether to use Qdrant (persistent) or in-memory TF-IDF (stub/offline)
     qdrant_enabled: bool = Field(False, validation_alias=AliasChoices("LEX_QDRANT_ENABLED", "qdrant_enabled"))
 
+    # V3.4: Redis — ARQ job queue for the living agent worker
+    redis_url: Optional[str] = Field(None, validation_alias=AliasChoices("REDIS_URL", "redis_url"))
+
     # ----------------------------------------------------------------
     # Phase 9: FastAPI Control Plane
     # ----------------------------------------------------------------
