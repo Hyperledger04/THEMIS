@@ -338,6 +338,31 @@ async def run(state: SeniorCounselState) -> dict:
         else:
             console.print("[green]✓ Review:[/green] Structural checks passed (warnings above)")
 
+        # R2B: persist review findings as mem0 learning signals.
+        # P1 issues reveal what the reviewer consistently flags for this matter type —
+        # future drafts can pre-empt these by knowing the common gaps.
+        try:
+            from themis.config import LexConfig as _LexConfig
+            from themis.memory.lawyer_memory import save_feedback as _save_feedback
+            _cfg = _LexConfig()
+            _lawyer_id = state.get("lawyer_id") or "default_lawyer"
+            _matter_id = state.get("matter_id") or ""
+            _mt = matter_type or "unknown"
+            _jur = jurisdiction or "India"
+            if p1_issues:
+                _review_signal = (
+                    f"In {_mt} draft for {_jur}, reviewer flagged: "
+                    + "; ".join(p1_issues[:3])
+                )
+            else:
+                _review_signal = f"Review passed cleanly for {_mt} draft in {_jur}."
+            _save_feedback(
+                _review_signal, _matter_id, _lawyer_id, _cfg,
+                metadata={"source": "review", "matter_type": _mt},
+            )
+        except Exception:
+            pass  # review feedback failure must never block .docx output
+
         # ── Generate .docx (only reaches here if no P0 blocking issues) ──────
         # WHY run_in_executor: write_docx does synchronous disk I/O (python-docx).
         # Running it in the default ThreadPoolExecutor keeps the asyncio event loop

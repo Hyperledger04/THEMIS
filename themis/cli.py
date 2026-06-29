@@ -64,6 +64,9 @@ app.add_typer(matter_app, name="matter")
 agent_app = typer.Typer(name="agent", help="Create and manage custom agent personas.")
 app.add_typer(agent_app, name="agent")
 
+mem0_app = typer.Typer(name="mem0", help="Manage semantic memory (mem0 + Qdrant).")
+app.add_typer(mem0_app, name="mem0")
+
 console = Console()
 
 
@@ -2516,6 +2519,103 @@ def grid_cmd(
             for question, row in grid.items():
                 w.writerow([question] + [row.get(d, "") for d in docs])
         console.print(f"[green]Saved to {output_csv}[/green]")
+
+
+# ---------------------------------------------------------------------------
+# lex mem0 — semantic memory management (R2B)
+# ---------------------------------------------------------------------------
+
+
+@mem0_app.command("seed")
+def mem0_seed(
+    all_matters: bool = typer.Option(False, "--all-matters", help="Also seed all saved MEMORY.md files."),
+) -> None:
+    """
+    Bootstrap mem0 from your existing SOUL.md (and optionally all matter MEMORY.md files).
+
+    Run this once after enabling LEX_MEM0_ENABLED=true to populate Qdrant with your
+    lawyer profile so future drafts start with real style memories from day one.
+    """
+    config = LexConfig()
+    if not config.mem0_enabled:
+        console.print("[yellow]mem0 is disabled.[/yellow] Set LEX_MEM0_ENABLED=true and re-run.")
+        return
+
+    from themis.memory.lawyer_memory import seed_soul_to_mem0, seed_matter_to_mem0
+    from themis.memory.matter_memory import list_matters
+
+    # Derive a stable lawyer_id from SOUL.md name or fall back to "default_lawyer"
+    from themis.memory.soul import load_soul
+    soul = load_soul(config.home_dir)
+    lawyer_name = (soul or {}).get("name", "").strip()
+    lawyer_id = lawyer_name.lower().replace(" ", "_") if lawyer_name else "default_lawyer"
+
+    console.print(f"[bold]Seeding mem0[/bold] for lawyer: [cyan]{lawyer_id}[/cyan]")
+
+    with console.status("Seeding SOUL.md …"):
+        soul_count = seed_soul_to_mem0(lawyer_id, config)
+    console.print(f"  [green]✓[/green] SOUL.md → [bold]{soul_count}[/bold] memories stored")
+
+    if all_matters:
+        matters = list_matters(config.matters_dir)
+        if not matters:
+            console.print("  [dim]No saved matters found.[/dim]")
+        for matter_id in matters:
+            with console.status(f"Seeding matter {matter_id} …"):
+                count = seed_matter_to_mem0(matter_id, lawyer_id, config)
+            console.print(f"  [green]✓[/green] {matter_id} → [bold]{count}[/bold] memories stored")
+
+    console.print("\n[green]Done.[/green] Run [cyan]lex mem0 status[/cyan] to verify.")
+
+
+@mem0_app.command("status")
+def mem0_status() -> None:
+    """
+    Show mem0 configuration and memory count. Checks Qdrant connectivity."""
+    config = LexConfig()
+
+    from rich.table import Table as RichTable
+    table = RichTable(show_header=False, box=None, padding=(0, 2))
+
+    table.add_row("mem0 enabled", "[green]yes[/green]" if config.mem0_enabled else "[red]no[/red]")
+    table.add_row("Qdrant URL", config.qdrant_url)
+    table.add_row("Collection", config.mem0_collection)
+    table.add_row("Embedding model", config.embedding_model)
+    console.print(table)
+
+    if not config.mem0_enabled:
+        console.print("\nSet [cyan]LEX_MEM0_ENABLED=true[/cyan] to enable. Install with: [cyan]uv sync --extra mem0[/cyan]")
+        return
+
+    # Try to connect and count memories
+    from themis.memory.mem0_client import Mem0Client
+    from themis.memory.soul import load_soul
+    soul = load_soul(config.home_dir)
+    lawyer_name = (soul or {}).get("name", "").strip()
+    lawyer_id = lawyer_name.lower().replace(" ", "_") if lawyer_name else "default_lawyer"
+
+    with console.status("Connecting to Qdrant …"):
+        client = Mem0Client(
+            qdrant_url=config.qdrant_url,
+            qdrant_api_key=config.qdrant_api_key,
+            collection_name=config.mem0_collection,
+            embedding_model=config.embedding_model,
+            openai_api_key=config.openai_api_key,
+        )
+
+    if not client.is_available:
+        console.print("[red]✗ Qdrant unreachable.[/red] Is the container running?")
+        console.print("  Start with: [cyan]docker-compose up qdrant[/cyan]")
+        return
+
+    memories = client.get_all(user_id=lawyer_id)
+    console.print(f"\n[green]✓ Qdrant connected.[/green] Lawyer [cyan]{lawyer_id}[/cyan] has [bold]{len(memories)}[/bold] memories.")
+    if memories:
+        console.print("\n[dim]Recent memories:[/dim]")
+        for m in memories[-5:]:
+            console.print(f"  • {m[:120]}{'…' if len(m) > 120 else ''}")
+    else:
+        console.print("\n[dim]No memories yet. Run [cyan]lex mem0 seed[/cyan] to bootstrap.[/dim]")
 
 
 if __name__ == "__main__":

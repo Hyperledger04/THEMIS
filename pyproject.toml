@@ -58,6 +58,14 @@ voice = [
     "httpx>=0.27",             # HTTP client for TTS/STT REST calls
 ]
 
+# R2A: mem0 semantic memory layer — evolving lawyer style preferences backed by Qdrant.
+# Install with: uv sync --extra mem0
+# WHY optional: personal mode (file-only memory) works with zero extra deps.
+# Enable with: LEX_MEM0_ENABLED=true (requires Qdrant running locally or in docker-compose).
+mem0 = [
+    "mem0ai>=0.1.29",
+]
+
 [project.scripts]
 themis = "themis.cli:app"
 

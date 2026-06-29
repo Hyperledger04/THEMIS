@@ -237,9 +237,18 @@ def _build_draft_instruction(state: SeniorCounselState) -> str:
         # Including them in the instruction would cause KeyError and pollute citation
         # extraction with None values. Filter them out — they inform chunking, not drafting.
         citable = [r for r in research if r.get("citation")]
-        instruction += "\n\nVerified case law to use:\n" + "\n".join(
+        # WHY XML wrapper: retrieved case text is external/untrusted content fetched
+        # from Indian Kanoon or the web. The <retrieved_case_law> tag signals to the
+        # LLM that this block is data to cite from, not instructions to follow —
+        # mitigating indirect prompt injection via crafted judgment text.
+        case_lines = "\n".join(
             f"- {r['case_name']} ({r['citation']}): {r.get('relevance', r.get('snippet', ''))}"
             for r in citable
+        )
+        instruction += (
+            "\n\n<retrieved_case_law>\n"
+            + case_lines
+            + "\n</retrieved_case_law>"
         )
     else:
         instruction += (
@@ -354,6 +363,12 @@ async def run(state: SeniorCounselState) -> dict:
         matter_mem = load_matter_memory(matter_id, config.matters_dir, firm_id=firm_id) if matter_id else None
         draft_instruction = inject_memory_into_user_turn(draft_instruction, matter_mem)
 
+        # R2A: enriched lawyer profile — SOUL.md + mem0 style memories when enabled.
+        # Falls back to state["lawyer_soul"] (set during intake) if enrichment fails.
+        from themis.memory.soul import load_soul_enriched
+        lawyer_id = state.get("lawyer_id") or "default_lawyer"
+        enriched_soul: Optional[str] = load_soul_enriched(lawyer_id, config)
+
         use_anthropic_caching = (
             config.model_provider == "anthropic"
             and config.enable_prompt_caching
@@ -378,7 +393,7 @@ async def run(state: SeniorCounselState) -> dict:
             # WHY content blocks: litellm.acompletion() accepts native Anthropic content block
             # format including cache_control — this is the only way to get Layer 2 caching.
             system_blocks = build_system_prompt_blocks(
-                soul=state.get("lawyer_soul"),
+                soul=enriched_soul or state.get("lawyer_soul"),
                 skill_content=state.get("active_skill"),
                 use_cache_control=True,
                 agent=state.get("active_agent"),
@@ -403,7 +418,10 @@ async def run(state: SeniorCounselState) -> dict:
         else:
             # Layer 1 only: direct litellm streaming (any provider) + LiteLLM disk cache
             base_prompt = _load_prompt("base_system.md")
-            system_prompt_str = _build_string_system_prompt(state, base_prompt, wisdom_text=wisdom_text)
+            # Pass enriched soul via a shallow state copy so _build_string_system_prompt
+            # picks it up through state.get("lawyer_soul") without signature changes.
+            _draft_state = {**state, "lawyer_soul": enriched_soul or state.get("lawyer_soul")}
+            system_prompt_str = _build_string_system_prompt(_draft_state, base_prompt, wisdom_text=wisdom_text)
 
             messages = [
                 {"role": "system", "content": system_prompt_str},
@@ -428,6 +446,35 @@ async def run(state: SeniorCounselState) -> dict:
             "plain_english_summary": summary,
             "messages": list(state.get("messages", [])) + [{"role": "assistant", "content": full_output}],
         }
+
+        # R2B: persist a rich learning signal to mem0.
+        # Includes the plain-English summary (what was actually produced) and
+        # statutes cited — enough for mem0 to build real style/preference memories.
+        try:
+            from themis.memory.lawyer_memory import save_feedback
+            _matter_type = state.get("matter_type") or "unknown"
+            _jurisdiction = state.get("jurisdiction") or "India"
+            _skill = state.get("active_skill_name") or ""
+            _statutes = state.get("statutes_cited") or []
+            _summary = summary or ""
+
+            # Build a signal with actual substance, not just metadata
+            _parts = [f"Drafted {_matter_type} matter for {_jurisdiction}."]
+            if _skill:
+                _parts.append(f"Skill used: {_skill}.")
+            if _statutes:
+                statutes_str = ", ".join(_statutes[:5]) if isinstance(_statutes, list) else str(_statutes)
+                _parts.append(f"Statutes cited: {statutes_str}.")
+            if _summary:
+                _parts.append(f"Summary: {_summary}")
+            _signal = " ".join(_parts)
+
+            save_feedback(
+                _signal, matter_id, lawyer_id, config,
+                metadata={"matter_type": _matter_type, "jurisdiction": _jurisdiction},
+            )
+        except Exception:
+            pass  # learning signal failure must never block the draft result
 
         # ── Affidavit sub-document for S.138 complaints ───────────────────
         # WHY: S.138 summary trials under S.143 NI Act take evidence by affidavit.

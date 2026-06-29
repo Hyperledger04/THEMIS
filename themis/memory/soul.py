@@ -69,6 +69,28 @@ def load_soul(home_dir: str = "~/.themis") -> Optional[dict]:
     return _parse_soul(content)
 
 
+def load_soul_enriched(lawyer_id: str, config: Optional[object] = None) -> Optional[str]:
+    """
+    Return the raw SOUL.md text, optionally enriched with mem0 style memories.
+
+    Used by the draft node instead of load_soul() — returns the full text
+    block ready for prompt injection rather than a parsed dict.
+
+    WHY a separate function: load_soul() returning a dict is load-bearing for
+    the setup wizard and tests. This companion function gives the draft node
+    a string without changing the existing API.
+    """
+    if config is None:
+        # No config → plain file read, no mem0
+        path = soul_path()
+        if not path.exists():
+            return None
+        return path.read_text(encoding="utf-8")
+
+    from themis.memory.lawyer_memory import load_lawyer_profile
+    return load_lawyer_profile(lawyer_id, config)  # type: ignore[arg-type]
+
+
 def save_soul(soul_data: dict, home_dir: str = "~/.themis") -> Path:
     path = soul_path(home_dir)
     path.parent.mkdir(parents=True, exist_ok=True)

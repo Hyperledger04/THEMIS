@@ -48,6 +48,9 @@ class LexConfig(BaseSettings):
     # Agent behaviour
     # ----------------------------------------------------------------
     max_iterations: int = Field(20, validation_alias=AliasChoices("LEX_MAX_ITERATIONS", "max_iterations"))
+    # WHY: ReAct research loop cap — 3 iterations balances thoroughness vs cost.
+    # Each iteration costs 2 LLM calls (planner + evaluator) plus API searches.
+    react_research_max_iter: int = Field(3, validation_alias=AliasChoices("LEX_REACT_MAX_ITER", "react_research_max_iter"))
     auto_verify_citations: bool = Field(True, validation_alias=AliasChoices("LEX_AUTO_VERIFY_CITATIONS", "auto_verify_citations"))
     auto_save_matter: bool = Field(True, validation_alias=AliasChoices("LEX_AUTO_SAVE_MATTER", "auto_save_matter"))
     # WHY: Two-layer caching — Layer 1 (SQLiteCache, all providers) eliminates duplicate API calls.
@@ -115,9 +118,7 @@ class LexConfig(BaseSettings):
     # so no live HTTP calls are made. Production value is the official Kanoon API base.
     kanoon_api_base_url: str = Field("https://api.indiankanoon.org", validation_alias=AliasChoices("KANOON_API_BASE_URL", "kanoon_api_base_url"))
     kanoon_mcp_server: str = Field("E-courts", validation_alias=AliasChoices("LEX_KANOON_MCP", "kanoon_mcp_server"))
-    # WHY: headless=False by default so lawyers can watch the browser during research.
-    # Set LEX_KANOON_HEADLESS=true in .env for background / CI runs.
-    kanoon_headless: bool = Field(False, validation_alias=AliasChoices("LEX_KANOON_HEADLESS", "kanoon_headless"))
+    kanoon_headless: bool = Field(True, validation_alias=AliasChoices("LEX_KANOON_HEADLESS", "kanoon_headless"))
     kanoon_max_results: int = Field(3, validation_alias=AliasChoices("LEX_KANOON_MAX_RESULTS", "kanoon_max_results"))
 
     # eCourts (Indian court case status)
@@ -218,6 +219,18 @@ class LexConfig(BaseSettings):
 
     # V3.4: Redis — ARQ job queue for the living agent worker
     redis_url: Optional[str] = Field(None, validation_alias=AliasChoices("REDIS_URL", "redis_url"))
+
+    # ----------------------------------------------------------------
+    # R2A: mem0 Semantic Memory Layer
+    # WHY: mem0 turns static SOUL.md preferences into a live, queryable store
+    # that improves with every draft. Disabled by default — personal mode
+    # needs zero config; enable with LEX_MEM0_ENABLED=true + running Qdrant.
+    # ----------------------------------------------------------------
+    mem0_enabled: bool = Field(False, validation_alias=AliasChoices("LEX_MEM0_ENABLED", "mem0_enabled"))
+    # mem0 cloud API key (optional — leave unset to use self-hosted Qdrant backend)
+    mem0_api_key: Optional[str] = Field(None, validation_alias=AliasChoices("MEM0_API_KEY", "mem0_api_key"))
+    # Qdrant collection name for lawyer memories (separate from judgments collection)
+    mem0_collection: str = Field("lex_lawyer_memory", validation_alias=AliasChoices("LEX_MEM0_COLLECTION", "mem0_collection"))
 
     # ----------------------------------------------------------------
     # Phase 9: FastAPI Control Plane
