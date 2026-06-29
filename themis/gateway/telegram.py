@@ -17,6 +17,7 @@ import os
 import random
 import re
 import tempfile
+import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -121,6 +122,25 @@ class TelegramSession:
 
 
 _sessions: dict[int, TelegramSession] = {}
+
+# WHY: Rate limiting is the first line of defence against flooding and unbounded
+# LLM cost. We track the last accepted message timestamp per user_id in a plain
+# dict — no Redis needed for a single-process bot. _RATE_LIMIT_SECONDS defines
+# the minimum gap between accepted messages (3 s ≈ fast typing, well below normal
+# interaction pace). The window resets per user so one flood does not block others.
+_user_last_message_ts: dict[int, float] = {}
+_RATE_LIMIT_SECONDS: float = 3.0
+
+
+def _is_rate_limited(user_id: int) -> bool:
+    """Return True (and do NOT update timestamp) if the user is sending too fast."""
+    now = time.monotonic()
+    last = _user_last_message_ts.get(user_id, 0.0)
+    if now - last < _RATE_LIMIT_SECONDS:
+        return True
+    _user_last_message_ts[user_id] = now
+    return False
+
 
 # Pattern matching internal Themis matter IDs (e.g. M-FC4A838E)
 _MATTER_ID_RE = re.compile(r'\bM-[A-F0-9]{8}\b')
@@ -1067,6 +1087,10 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     user = update.effective_user
     if not _is_allowed(user.id, cfg):
         await update.message.reply_text("Sorry, you are not authorised to use this bot.")
+        return
+
+    if _is_rate_limited(user.id):
+        await update.message.reply_text("⏳ Please wait a moment before sending another message.")
         return
 
     session = _get_or_create_session(user.id, cfg)

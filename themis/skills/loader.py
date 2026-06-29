@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import io
 import json
+import logging
 import re
 import zipfile
 from pathlib import Path
@@ -25,6 +26,22 @@ from typing import NamedTuple, Optional
 
 import litellm
 import yaml
+
+_logger = logging.getLogger(__name__)
+
+# WHY: User-writable skills (~/.themis/skills/) are injected verbatim into the
+# system prompt. A compromised skill file (via sync tool, rogue editor plugin,
+# etc.) could override agent instructions. Bundled skills are trusted (in git);
+# only user skills are checked at load time.
+_INJECTION_RE = re.compile(
+    r"(ignore\s+(all\s+)?(previous|prior|above)\s+(instructions?|rules?)|"
+    r"you\s+are\s+now\s+a|"
+    r"disregard\s+your|"
+    r"new\s+persona|"
+    r"override\s+(all\s+)?instructions?|"
+    r"forget\s+(all\s+)?previous)",
+    re.IGNORECASE,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -66,6 +83,12 @@ def load_skill_with_tier(
             by_name[skill["name"]] = skill
     for skill in user:
         if skill["name"]:
+            if _INJECTION_RE.search(skill["body"]):
+                _logger.warning(
+                    "User skill '%s' contains suspicious override pattern — skipped.",
+                    skill["name"],
+                )
+                continue
             by_name[skill["name"]] = skill
 
     skills = list(by_name.values())
@@ -112,6 +135,14 @@ def load_skill(
             by_name[skill["name"]] = skill
     for skill in user:
         if skill["name"]:
+            # WHY: validate user skills before they can override bundled ones.
+            # Bundled skills are version-controlled and trusted; user skills are not.
+            if _INJECTION_RE.search(skill["body"]):
+                _logger.warning(
+                    "User skill '%s' contains suspicious override pattern — skipped.",
+                    skill["name"],
+                )
+                continue
             by_name[skill["name"]] = skill  # overwrites bundled if same name
 
     skills = list(by_name.values())
